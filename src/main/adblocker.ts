@@ -4,12 +4,12 @@ import fetch from 'cross-fetch'
 
 export async function setupAdblocker(targetSession: Session): Promise<void> {
   try {
-    // Use the pre-bundled ad-blocking list. This prevents ETIMEDOUT errors
-    // and doesn't load the tracking list, keeping Google SSO working perfectly!
-    const blocker = await ElectronBlocker.fromPrebuiltAdsOnly(fetch)
+    // Use the comprehensive pre-bundled ads & tracking list. 
+    // This blocks a significantly larger range of telemetry and ad delivery domains.
+    const blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch)
     
     blocker.enableBlockingInSession(targetSession)
-    console.log('[Aura] Brave-style Ad blocker (EasyList) active for YTM session')
+    console.log('[Aura] Ad blocker (Ads + Tracking) active for YTM session')
   } catch (err) {
     console.error('[Aura] Failed to initialize adblocker:', err)
   }

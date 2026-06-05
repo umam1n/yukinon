@@ -29,7 +29,8 @@ function sendStateUpdate() {
 }
 
 // 1. Instant Ad Skipper — observes the whole body so it catches all dynamic elements
-const adObserver = new MutationObserver(() => {
+// 1. Instant Ad Skipper — observes and polls to catch all dynamic elements
+function skipAds() {
   // Skip button variants
   const skipButton = document.querySelector(
     '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, [id*="skip"], [class*="skip-button"]'
@@ -46,16 +47,20 @@ const adObserver = new MutationObserver(() => {
     document.querySelector('.ytp-ad-player-overlay') ||
     document.querySelector('.ytp-ad-progress') ||
     document.querySelector('.ytp-ad-module') ||
-    document.querySelector('.video-ads.ytp-ad-module')
+    document.querySelector('.video-ads.ytp-ad-module') ||
+    document.querySelector('ytmusic-player-bar[is-ad_]')
   )
   const video = document.querySelector('video')
-  if (isVideoAd && video && isFinite(video.duration) && video.duration > 0) {
+  if (isVideoAd && video && isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration) {
     video.muted = true
     video.playbackRate = 16.0
     video.currentTime = video.duration
     console.log('[Aura YTM] Fast-forwarded unskippable ad')
   }
-})
+}
+
+const adObserver = new MutationObserver(skipAds)
+setInterval(skipAds, 500) // Fallback polling every 500ms just in case observer misses it
 
 // 2. Video Element Event Listeners — attach when the video element is created
 function attachVideoListeners() {

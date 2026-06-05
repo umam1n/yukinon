@@ -180,11 +180,12 @@ export function registerYTMHandlers(
     await ytmView.webContents.executeJavaScript(`
       (function() {
         const video = document.querySelector('video');
-        const btn = document.querySelector('.play-pause-button, tp-yt-paper-icon-button#play-pause-button');
-        if (video && !video.paused && btn) {
-          btn.click();
-        } else if (video && !video.paused) {
+        if (video && !video.paused) {
           video.pause();
+        }
+        const btn = document.querySelector('.play-pause-button, tp-yt-paper-icon-button#play-pause-button');
+        if (btn && btn.getAttribute('aria-label')?.includes('Pause')) {
+          btn.click(); // Tell YTM's UI it's paused
         }
       })()
     `).catch(() => {})
@@ -200,6 +201,22 @@ export function registerYTMHandlers(
     // setAudioMuted works at the Chromium process level — it's impossible for
     // any JavaScript inside the page to bypass this. This is how Brave silences tabs.
     ytmView.webContents.setAudioMuted(isLocked)
+    // We MUST also set window.__auraLocalLock so the preload script knows NOT to resume playback
+    await ytmView.webContents.executeJavaScript(`
+      (function() {
+        window.__auraLocalLock = ${isLocked};
+        if (${isLocked}) {
+          const video = document.querySelector('video');
+          if (video) {
+            video.pause();
+            video.muted = true;
+          }
+        } else {
+          const video = document.querySelector('video');
+          if (video) video.muted = false;
+        }
+      })()
+    `).catch(() => {})
     console.log(`[YTM] Audio ${isLocked ? 'muted (local playing)' : 'unmuted (local stopped)'}`)
   })
 
