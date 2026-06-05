@@ -45,14 +45,16 @@ function skipAds() {
   }
 
   // For unskippable in-stream video ads: detect by class on html or body, then fast-forward
+  // Many ad elements exist in the DOM permanently but are hidden, so we must check for visibility or specific active classes.
+  const adOverlay = document.querySelector('.ytp-ad-player-overlay') as HTMLElement
+  const adModule = document.querySelector('.ytp-ad-module') as HTMLElement
   const isVideoAd = !!(
-    document.querySelector('.ad-showing') ||
-    document.querySelector('.ytp-ad-player-overlay') ||
-    document.querySelector('.ytp-ad-progress') ||
-    document.querySelector('.ytp-ad-module') ||
-    document.querySelector('.video-ads.ytp-ad-module') ||
-    document.querySelector('ytmusic-player-bar[is-ad_]')
+    document.querySelector('.html5-video-player.ad-showing') ||
+    document.querySelector('ytmusic-player-bar[is-ad_]') ||
+    (adOverlay && adOverlay.offsetParent !== null) ||
+    (adModule && adModule.offsetParent !== null && adModule.children.length > 0)
   )
+
   const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
   if (isVideoAd && video && isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration) {
     video.muted = true
