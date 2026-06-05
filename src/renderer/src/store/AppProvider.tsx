@@ -94,6 +94,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   useEffect(() => {
     if (!yukinon.ytm.onStateUpdate) return
     const unsub = yukinon.ytm.onStateUpdate((info: any) => {
+      console.log('[Frontend] Received ytm:state-update:', info)
       // If YTM just started playing → it wins. Pause local audio, release the mute lock, hand control to YTM.
       if (info.isPlaying && localActiveRef.current) {
         if (audioRef.current && !audioRef.current.paused) {

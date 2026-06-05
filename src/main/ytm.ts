@@ -19,6 +19,10 @@ export function getOrCreateYTMView(): BrowserView {
     }
   })
 
+  ytmView.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[YTM Preload/Console] ${message} (line ${line} in ${sourceId})`)
+  })
+
   ytmView.webContents.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
   )
@@ -179,7 +183,7 @@ export function registerYTMHandlers(
     if (!ytmView) return
     await ytmView.webContents.executeJavaScript(`
       (function() {
-        const video = document.querySelector('video');
+        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
         if (video && !video.paused) {
           video.pause();
         }
@@ -225,7 +229,7 @@ export function registerYTMHandlers(
     if (!ytmView) return
     await ytmView.webContents.executeJavaScript(`
       (function() {
-        const video = document.querySelector('video');
+        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
         if (video) video.currentTime = ${position};
       })()
     `).catch(() => {})
@@ -233,6 +237,7 @@ export function registerYTMHandlers(
 
   // Listen for real-time state updates from the YTM preload script and forward them to the frontend
   ipc.on('ytm:state-changed', (event, state) => {
+    console.log('[Main] Received ytm:state-changed from YTM, forwarding to frontend...', state)
     if (mainWindow) {
       mainWindow.webContents.send('ytm:state-update', state)
     }

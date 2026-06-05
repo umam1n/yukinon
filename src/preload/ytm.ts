@@ -13,7 +13,9 @@ function sendStateUpdate() {
   const title = document.querySelector('.title.ytmusic-player-bar')?.textContent?.trim() || ''
   const artist = document.querySelector('.byline.ytmusic-player-bar')?.textContent?.trim() || ''
   const artwork = document.querySelector('#thumbnail img, .thumbnail img')?.getAttribute('src') || ''
-  const video = document.querySelector('video')
+  
+  // YouTube Music uses .html5-main-video for the active player. Grabbing just 'video' might grab hidden ad videos.
+  const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
   
   const duration = video?.duration || 0
   const position = video?.currentTime || 0
@@ -24,6 +26,7 @@ function sendStateUpdate() {
   // Only send if it actually changed meaningfully (prevent spamming IPC)
   if (JSON.stringify(state) !== JSON.stringify(lastState)) {
     lastState = state
+    console.log('[Yukinon YTM] Sending state update:', state)
     ipcRenderer.send('ytm:state-changed', state)
   }
 }
@@ -50,7 +53,7 @@ function skipAds() {
     document.querySelector('.video-ads.ytp-ad-module') ||
     document.querySelector('ytmusic-player-bar[is-ad_]')
   )
-  const video = document.querySelector('video')
+  const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
   if (isVideoAd && video && isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration) {
     video.muted = true
     video.playbackRate = 16.0
@@ -64,29 +67,28 @@ setInterval(skipAds, 500) // Fallback polling every 500ms just in case observer 
 
 // 2. Video Element Event Listeners — attach when the video element is created
 function attachVideoListeners() {
-  const video = document.querySelector('video')
-  if (!video || video.hasAttribute('data-yukinon-attached')) return
-  video.setAttribute('data-yukinon-attached', 'true')
+  const videos = document.querySelectorAll('video')
+  videos.forEach((video) => {
+    if (!video || video.hasAttribute('data-yukinon-attached')) return
+    video.setAttribute('data-yukinon-attached', 'true')
 
-  video.addEventListener('timeupdate', () => {
-    // Enforce Volume Lock
-    if (Math.abs(video.volume - lockedVolume) > 0.05) {
-      video.volume = lockedVolume
-    }
-    sendStateUpdate()
-  })
+    video.addEventListener('timeupdate', () => {
+      // Enforce Volume Lock
+      if (Math.abs(video.volume - lockedVolume) > 0.05) {
+        video.volume = lockedVolume
+      }
+      // Only send state update if this video is actually playing the main content
+      if (video.duration > 0) {
+        sendStateUpdate()
+      }
+    })
 
-  video.addEventListener('play', () => {
-    // We removed the restrictive __yukinonLocalLock.
-    // If YTM plays, we just send the state update. The AppProvider will see
-    // it playing and automatically pause the local audio.
-    sendStateUpdate()
-  })
+    video.addEventListener('play', () => {
+      sendStateUpdate()
+    })
 
-  video.addEventListener('pause', sendStateUpdate)
-  video.addEventListener('loadeddata', () => {
-    // Reset data-yukinon-attached if YTM swapped the video element
-    sendStateUpdate()
+    video.addEventListener('pause', sendStateUpdate)
+    video.addEventListener('loadeddata', sendStateUpdate)
   })
 }
 
@@ -99,7 +101,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   setInterval(() => {
     // Re-attach to video if YTM creates a new one (track change)
-    const video = document.querySelector('video')
+    const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
     if (video && !video.hasAttribute('data-yukinon-attached')) {
       attachVideoListeners()
     }
@@ -121,6 +123,6 @@ window.addEventListener('DOMContentLoaded', () => {
 // 4. IPC: Volume control from main process
 ipcRenderer.on('ytm:set-volume', (_, vol: number) => {
   lockedVolume = vol
-  const video = document.querySelector('video')
+  const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
   if (video) video.volume = vol
 })
