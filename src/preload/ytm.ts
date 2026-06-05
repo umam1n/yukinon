@@ -17,8 +17,8 @@ function sendStateUpdate() {
   // YouTube Music uses .html5-main-video for the active player. Grabbing just 'video' might grab hidden ad videos.
   const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
   
-  const duration = video?.duration || 0
-  const position = video?.currentTime || 0
+  const duration = Math.floor(video?.duration || 0)
+  const position = Math.floor(video?.currentTime || 0)
   const isPlaying = video ? !video.paused && !video.muted : false
 
   const state = { title, artist, artwork, duration, position, isPlaying }
