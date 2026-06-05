@@ -12,7 +12,7 @@ let lastState = {}
 function sendStateUpdate() {
   const title = document.querySelector('.title.ytmusic-player-bar')?.textContent?.trim() || ''
   const artist = document.querySelector('.byline.ytmusic-player-bar')?.textContent?.trim() || ''
-  const artwork = document.querySelector('#thumbnail img, .thumbnail img')?.getAttribute('src') || ''
+  const artwork = document.querySelector('.image.ytmusic-player-bar, #thumbnail img, .thumbnail img')?.getAttribute('src') || ''
   
   // YouTube Music uses .html5-main-video for the active player. Grabbing just 'video' might grab hidden ad videos.
   const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
