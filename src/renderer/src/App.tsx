@@ -16,7 +16,7 @@ import FullscreenPlayer from './components/FullscreenPlayer'
 // Inner app component that has access to context
 function AppInner(): React.ReactElement {
   const { activeView } = useApp()
-  const showTitleBar = window.aura.platform === 'darwin'
+  const showTitleBar = window.yukinon.platform === 'darwin'
 
   return (
     <div
@@ -54,9 +54,9 @@ function AppInner(): React.ReactElement {
 // so we just need to show/hide it via IPC
 function YTMPlaceholder(): React.ReactElement {
   useEffect(() => {
-    window.aura.ytm.show()
+    window.yukinon.ytm.show()
     return () => {
-      window.aura.ytm.hide()
+      window.yukinon.ytm.hide()
     }
   }, [])
 
@@ -78,9 +78,9 @@ export default function App(): React.ReactElement {
   )
 }
 
-// Declare global window.aura type
+// Declare global window.yukinon type
 declare global {
   interface Window {
-    aura: import('../../preload/index').AuraAPI
+    yukinon: import('../../preload/index').YukinonAPI
   }
 }

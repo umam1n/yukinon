@@ -9,12 +9,12 @@ export type PresetFilter = {
 
 export async function fetchCommunityPresets(filter: PresetFilter = {}): Promise<CommunityPreset[]> {
   if (!isSupabaseConfigured) {
-    console.warn('[Aura] Supabase is not configured. Returning empty presets.')
+    console.warn('[Yukinon] Supabase is not configured. Returning empty presets.')
     return []
   }
 
   let query = supabase
-    .from('aura_presets')
+    .from('yukinon_presets')
     .select('*')
     .order(filter.sortBy === 'newest' ? 'created_at' : 'upvotes', { ascending: false })
     .limit(50)
@@ -53,7 +53,7 @@ export async function publishPreset(
   }
 
   const { data, error } = await supabase
-    .from('aura_presets')
+    .from('yukinon_presets')
     .insert({
       title,
       author_name: authorName || 'Anonymous',
@@ -83,7 +83,7 @@ export async function upvotePreset(id: string): Promise<void> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase is not configured. Community voting is unavailable.')
   }
-  const { error } = await supabase.rpc('upvote_aura_preset', { preset_id: id })
+  const { error } = await supabase.rpc('upvote_yukinon_preset', { preset_id: id })
   if (error) throw error
 }
 

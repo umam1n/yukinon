@@ -29,7 +29,7 @@ export default function NowPlaying(): React.ReactElement {
         const audioEl = document.querySelector('audio') as HTMLAudioElement | null
         if (audioEl) audioEl.currentTime = pos
       } else {
-        window.aura.ytm.seek?.(pos)
+        window.yukinon.ytm.seek?.(pos)
       }
     },
     [setPlayer, player.source]
@@ -45,7 +45,7 @@ export default function NowPlaying(): React.ReactElement {
         audioEngine.setVolume(v)
       })
     } else {
-      window.aura.ytm.setVolume(v)
+      window.yukinon.ytm.setVolume(v)
     }
   }, [player.source, setPlayer])
 
@@ -59,7 +59,7 @@ export default function NowPlaying(): React.ReactElement {
         audioEngine.setVolume(v)
       })
     } else {
-      window.aura.ytm.setVolume(v)
+      window.yukinon.ytm.setVolume(v)
     }
   }, [isMuted, volume, player.source])
 

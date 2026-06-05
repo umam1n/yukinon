@@ -103,7 +103,7 @@ const api = {
   platform: process.platform
 }
 
-contextBridge.exposeInMainWorld('aura', api)
+contextBridge.exposeInMainWorld('yukinon', api)
 
 // TypeScript declaration for the renderer
-export type AuraAPI = typeof api
+export type YukinonAPI = typeof api

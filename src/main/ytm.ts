@@ -27,7 +27,7 @@ export function getOrCreateYTMView(): BrowserView {
 
   // Setup ad blocker for this session
   setupAdblocker(session.fromPartition('persist:ytm')).catch((err) => {
-    console.error('[Aura] Ad blocker failed:', err)
+    console.error('[Yukinon] Ad blocker failed:', err)
   })
 
   // Forward YTM-originated events to main window
@@ -233,8 +233,7 @@ export function registerYTMHandlers(
 
   // Listen for real-time state updates from the YTM preload script and forward them to the frontend
   ipc.on('ytm:state-changed', (event, state) => {
-    // Ensure the event came from our YTM view
-    if (ytmView && event.sender.id === ytmView.webContents.id) {
+    if (mainWindow) {
       mainWindow.webContents.send('ytm:state-update', state)
     }
   })

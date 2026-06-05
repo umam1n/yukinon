@@ -6,7 +6,7 @@ import { ipcRenderer } from 'electron'
 let lockedVolume = 0.8
 let lastState = {}
 
-// NOTE: playbackLock is now stored as window.__auraLocalLock,
+// NOTE: playbackLock is now stored as window.__yukinonLocalLock,
 // set directly by executeJavaScript from the main process for zero latency.
 
 function sendStateUpdate() {
@@ -37,7 +37,7 @@ function skipAds() {
   ) as HTMLElement
   if (skipButton && skipButton.offsetParent !== null) {
     skipButton.click()
-    console.log('[Aura YTM] Ad-skip clicked')
+    console.log('[Yukinon YTM] Ad-skip clicked')
     return
   }
 
@@ -55,7 +55,7 @@ function skipAds() {
     video.muted = true
     video.playbackRate = 16.0
     video.currentTime = video.duration
-    console.log('[Aura YTM] Fast-forwarded unskippable ad')
+    console.log('[Yukinon YTM] Fast-forwarded unskippable ad')
   }
 }
 
@@ -65,8 +65,8 @@ setInterval(skipAds, 500) // Fallback polling every 500ms just in case observer 
 // 2. Video Element Event Listeners — attach when the video element is created
 function attachVideoListeners() {
   const video = document.querySelector('video')
-  if (!video || video.hasAttribute('data-aura-attached')) return
-  video.setAttribute('data-aura-attached', 'true')
+  if (!video || video.hasAttribute('data-yukinon-attached')) return
+  video.setAttribute('data-yukinon-attached', 'true')
 
   video.addEventListener('timeupdate', () => {
     // Enforce Volume Lock
@@ -77,7 +77,7 @@ function attachVideoListeners() {
   })
 
   video.addEventListener('play', () => {
-    // We removed the restrictive __auraLocalLock.
+    // We removed the restrictive __yukinonLocalLock.
     // If YTM plays, we just send the state update. The AppProvider will see
     // it playing and automatically pause the local audio.
     sendStateUpdate()
@@ -85,7 +85,7 @@ function attachVideoListeners() {
 
   video.addEventListener('pause', sendStateUpdate)
   video.addEventListener('loadeddata', () => {
-    // Reset data-aura-attached if YTM swapped the video element
+    // Reset data-yukinon-attached if YTM swapped the video element
     sendStateUpdate()
   })
 }
@@ -95,12 +95,12 @@ window.addEventListener('DOMContentLoaded', () => {
   // Observe the FULL body — YTM doesn't have #movie_player, only ytmusic-player.
   // MutationObserver is efficient and only fires when DOM actually changes.
   adObserver.observe(document.body, { childList: true, subtree: true })
-  console.log('[Aura YTM] Ad-skip observer attached to body')
+  console.log('[Yukinon YTM] Ad-skip observer attached to body')
 
   setInterval(() => {
     // Re-attach to video if YTM creates a new one (track change)
     const video = document.querySelector('video')
-    if (video && !video.hasAttribute('data-aura-attached')) {
+    if (video && !video.hasAttribute('data-yukinon-attached')) {
       attachVideoListeners()
     }
   }, 1000)
@@ -109,8 +109,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // Watch title for track changes
   const checkTitle = () => {
     const titleNode = document.querySelector('.title.ytmusic-player-bar')
-    if (titleNode && !titleNode.hasAttribute('data-aura-title')) {
-      titleNode.setAttribute('data-aura-title', 'true')
+    if (titleNode && !titleNode.hasAttribute('data-yukinon-title')) {
+      titleNode.setAttribute('data-yukinon-title', 'true')
       new MutationObserver(sendStateUpdate).observe(titleNode, { childList: true, characterData: true, subtree: true })
     }
   }

@@ -25,7 +25,7 @@ export default function TitleBar(): React.ReactElement {
       {/* Window controls */}
       <div className="flex items-center gap-1 no-drag">
         <button
-          onClick={() => window.aura.window.minimize()}
+          onClick={() => window.yukinon.window.minimize()}
           className="w-8 h-8 flex items-center justify-center rounded-md transition-all hover:bg-white/10"
           style={{ color: 'var(--text-muted)' }}
           title="Minimize"
@@ -33,7 +33,7 @@ export default function TitleBar(): React.ReactElement {
           <Minus size={13} />
         </button>
         <button
-          onClick={() => window.aura.window.maximize()}
+          onClick={() => window.yukinon.window.maximize()}
           className="w-8 h-8 flex items-center justify-center rounded-md transition-all hover:bg-white/10"
           style={{ color: 'var(--text-muted)' }}
           title="Maximize"
@@ -41,7 +41,7 @@ export default function TitleBar(): React.ReactElement {
           <Square size={12} />
         </button>
         <button
-          onClick={() => window.aura.window.close()}
+          onClick={() => window.yukinon.window.close()}
           className="w-8 h-8 flex items-center justify-center rounded-md transition-all hover:bg-red-500/80 hover:text-white"
           style={{ color: 'var(--text-muted)' }}
           title="Close"

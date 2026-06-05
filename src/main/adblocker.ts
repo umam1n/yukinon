@@ -9,8 +9,8 @@ export async function setupAdblocker(targetSession: Session): Promise<void> {
     const blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch)
     
     blocker.enableBlockingInSession(targetSession)
-    console.log('[Aura] Ad blocker (Ads + Tracking) active for YTM session')
+    console.log('[Yukinon] Ad blocker (Ads + Tracking) active for YTM session')
   } catch (err) {
-    console.error('[Aura] Failed to initialize adblocker:', err)
+    console.error('[Yukinon] Failed to initialize adblocker:', err)
   }
 }

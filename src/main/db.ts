@@ -6,7 +6,7 @@ import type { EQBands } from '../../shared/types'
 let db: Database.Database
 
 export function initDatabase(): void {
-  const dbPath = join(app.getPath('userData'), 'aura.db')
+  const dbPath = join(app.getPath('userData'), 'yukinon.db')
   db = new Database(dbPath, { timeout: 5000 })
   db.pragma('journal_mode = WAL')
 

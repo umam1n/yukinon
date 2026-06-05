@@ -55,12 +55,12 @@ export default function LibraryView(): React.ReactElement {
 
   const handleAddFolder = useCallback(async () => {
     try {
-      const folderPath = await window.aura.library.selectFolder()
+      const folderPath = await window.yukinon.library.selectFolder()
       if (!folderPath) return
 
       setScanning(true)
-      const result = await window.aura.library.scan(folderPath) as { added: number; total: number }
-      const updated = await window.aura.library.getTracks() as Track[]
+      const result = await window.yukinon.library.scan(folderPath) as { added: number; total: number }
+      const updated = await window.yukinon.library.getTracks() as Track[]
       setTracks(updated)
       setNotification({
         message: `Scanned ${result.total} files, added ${result.added} new tracks.`,

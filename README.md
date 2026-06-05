@@ -1,4 +1,4 @@
-# Aura 🎵
+# Yukinon 🎵
 
 > Hybrid audiophile music player — local FLAC library + YouTube Music, with a 10-band EQ, device-aware profiles, and community preset sharing.
 
@@ -23,8 +23,8 @@
 ### Installation
 
 ```bash
-git clone https://github.com/umam1n/aura
-cd aura
+git clone https://github.com/umam1n/yukinon
+cd yukinon
 cp .env.example .env
 # Edit .env and add your Supabase credentials
 npm install

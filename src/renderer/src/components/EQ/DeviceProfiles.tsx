@@ -22,7 +22,7 @@ export default function DeviceProfiles(): React.ReactElement {
 
       // If we have a saved profile for this device, auto-apply it
       if (primary?.label) {
-        const profile = await window.aura.devices.getProfile(primary.label) as DeviceProfile | null
+        const profile = await window.yukinon.devices.getProfile(primary.label) as DeviceProfile | null
         if (profile) {
           const preset = eqPresets.find((p) => p.id === profile.presetId)
           if (preset) applyEqPreset(preset)
@@ -37,18 +37,18 @@ export default function DeviceProfiles(): React.ReactElement {
 
   // Load all saved profiles
   useEffect(() => {
-    window.aura.devices.listProfiles().then((p) => setProfiles(p as DeviceProfile[]))
+    window.yukinon.devices.listProfiles().then((p) => setProfiles(p as DeviceProfile[]))
   }, [justSaved])
 
   const handleSaveForDevice = useCallback(async () => {
     if (!currentDevice) return
-    await window.aura.devices.saveProfile(currentDevice, null, null, eqBands)
+    await window.yukinon.devices.saveProfile(currentDevice, null, null, eqBands)
     setJustSaved(true)
     setTimeout(() => setJustSaved(false), 2000)
   }, [currentDevice, eqBands])
 
   const handleDelete = useCallback(async (label: string) => {
-    await window.aura.devices.deleteProfile(label)
+    await window.yukinon.devices.deleteProfile(label)
     setProfiles((prev) => prev.filter((p) => p.deviceLabel !== label))
   }, [])
 

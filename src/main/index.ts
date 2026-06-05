@@ -67,7 +67,7 @@ async function createWindow(): Promise<void> {
 
 // Register custom protocol before app is ready
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'aura', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } }
+  { scheme: 'yukinon', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } }
 ])
 
 function setupGlobalShortcuts(): void {
@@ -83,7 +83,7 @@ function setupGlobalShortcuts(): void {
 }
 
 app.whenReady().then(async () => {
-  protocol.handle('aura', (request) => {
+  protocol.handle('yukinon', (request) => {
     try {
       const url = new URL(request.url)
       const filePath = url.searchParams.get('path')
@@ -96,7 +96,7 @@ app.whenReady().then(async () => {
         headers: request.headers
       })
     } catch (err) {
-      console.error('[Protocol] Error handling aura protocol request:', err)
+      console.error('[Protocol] Error handling yukinon protocol request:', err)
       return new Response('Internal error or invalid URL', { status: 500 })
     }
   })

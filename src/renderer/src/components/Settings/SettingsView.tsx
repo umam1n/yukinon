@@ -23,25 +23,25 @@ export default function SettingsView(): React.ReactElement {
 
   // Load saved folders on mount
   React.useEffect(() => {
-    window.aura.library.getFolders().then((f) => setFolders(f as string[]))
+    window.yukinon.library.getFolders().then((f) => setFolders(f as string[]))
   }, [])
 
   const handleRemoveFolder = async (folder: string): Promise<void> => {
-    await window.aura.library.removeFolder(folder)
+    await window.yukinon.library.removeFolder(folder)
     setFolders((prev) => prev.filter((f) => f !== folder))
   }
 
   const handleAddFolder = async () => {
     try {
-      const folderPath = await window.aura.library.selectFolder()
+      const folderPath = await window.yukinon.library.selectFolder()
       if (!folderPath) return
 
       setScanning(true)
-      const result = await window.aura.library.scan(folderPath) as { added: number; total: number }
-      const updated = await window.aura.library.getTracks() as any
+      const result = await window.yukinon.library.scan(folderPath) as { added: number; total: number }
+      const updated = await window.yukinon.library.getTracks() as any
       setTracks(updated)
       
-      const newFolders = await window.aura.library.getFolders()
+      const newFolders = await window.yukinon.library.getFolders()
       setFolders(newFolders as string[])
 
       setNotification({
@@ -62,7 +62,7 @@ export default function SettingsView(): React.ReactElement {
   }
 
   const handleFindDuplicates = async () => {
-    const result = await window.aura.library.findDuplicates() as { duplicateCount: number }
+    const result = await window.yukinon.library.findDuplicates() as { duplicateCount: number }
     setDuplicateCount(result.duplicateCount)
     if (result.duplicateCount === 0) {
       setNotification({ message: 'No duplicate tracks found!', type: 'success' })
@@ -73,8 +73,8 @@ export default function SettingsView(): React.ReactElement {
   const handleRemoveDuplicates = async () => {
     setRemovingDuplicates(true)
     try {
-      const result = await window.aura.library.removeDuplicates() as { removed: number; total: number }
-      const updated = await window.aura.library.getTracks() as any
+      const result = await window.yukinon.library.removeDuplicates() as { removed: number; total: number }
+      const updated = await window.yukinon.library.getTracks() as any
       setTracks(updated)
       setDuplicateCount(null)
       setNotification({

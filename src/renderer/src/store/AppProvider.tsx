@@ -3,7 +3,7 @@ import { AppContext, type AppStore } from './AppContext'
 import { audioEngine } from '../audio/AudioEngine'
 import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '../../../../shared/types'
 
-const aura = window.aura
+const yukinon = window.yukinon
 
 const DEFAULT_BANDS: EQBands = {
   32: 0, 64: 0, 125: 0, 250: 0, 500: 0,
@@ -45,16 +45,16 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   // Initialize on mount
   useEffect(() => {
     // Load theme
-    aura.theme.get().then((t: AppTheme) => {
+    yukinon.theme.get().then((t: AppTheme) => {
       setThemeState(t)
       applyThemeToDOM(t)
     })
 
     // Load library
-    aura.library.getTracks().then(setTracks)
+    yukinon.library.getTracks().then(setTracks)
 
     // Load EQ state
-    Promise.all([aura.eq.getBands(), aura.eq.getPresets(), aura.eq.getActivePresetId()]).then(
+    Promise.all([yukinon.eq.getBands(), yukinon.eq.getPresets(), yukinon.eq.getActivePresetId()]).then(
       ([bands, presets, presetId]) => {
         setEqBands(bands as EQBands)
         setEqPresets(presets as EQPreset[])
@@ -65,21 +65,21 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     )
 
     // Listen for EQ band changes from main process
-    const unsub = aura.eq.onBandsChanged((bands) => {
+    const unsub = yukinon.eq.onBandsChanged((bands) => {
       setEqBands(bands as EQBands)
       audioEngine.applyBands(bands as EQBands)
     })
 
     // Listen for theme changes
-    const unsubTheme = aura.theme.onChange((t) => {
+    const unsubTheme = yukinon.theme.onChange((t) => {
       setThemeState((prev) => ({ ...prev, ...(t as Partial<AppTheme>) }))
       applyThemeToDOM({ ...theme, ...(t as Partial<AppTheme>) })
     })
 
     // Media key listeners
-    const unsubPlay = aura.media.onPlayPause(togglePlayPause)
-    const unsubNext = aura.media.onNext(playNext)
-    const unsubPrev = aura.media.onPrev(playPrev)
+    const unsubPlay = yukinon.media.onPlayPause(togglePlayPause)
+    const unsubNext = yukinon.media.onNext(playNext)
+    const unsubPrev = yukinon.media.onPrev(playPrev)
 
     return () => {
       unsub()
@@ -92,8 +92,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
 
   // Listen for real-time YTM state updates
   useEffect(() => {
-    if (!aura.ytm.onStateUpdate) return
-    const unsub = aura.ytm.onStateUpdate((info: any) => {
+    if (!yukinon.ytm.onStateUpdate) return
+    const unsub = yukinon.ytm.onStateUpdate((info: any) => {
       // If YTM just started playing → it wins. Pause local audio, release the mute lock, hand control to YTM.
       if (info.isPlaying && localActiveRef.current) {
         if (audioRef.current && !audioRef.current.paused) {
@@ -101,7 +101,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         }
         localActiveRef.current = false
         // Unmute YTM so we can hear it
-        aura.ytm.setLock?.(false)
+        yukinon.ytm.setLock?.(false)
       }
 
       // Update player state for YTM if it's the active source or just became active
@@ -141,9 +141,9 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       const newTheme = { ...theme, ...updates }
       setThemeState(newTheme)
       applyThemeToDOM(newTheme)
-      aura.theme.set(updates)
+      yukinon.theme.set(updates)
       // Sync YTM theme: dark/light + accent color
-      aura.ytm.setTheme?.(newTheme.accentColor, newTheme.mode)
+      yukinon.ytm.setTheme?.(newTheme.accentColor, newTheme.mode)
     },
     [theme, applyThemeToDOM]
   )
@@ -152,8 +152,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     // Acquire lock synchronously before any async work
     localActiveRef.current = true
     // Mute YTM at OS/Chromium level (setAudioMuted) AND actually pause its video
-    aura.ytm.setLock?.(true)
-    aura.ytm.pause?.()
+    yukinon.ytm.setLock?.(true)
+    yukinon.ytm.pause?.()
 
     if (!audioRef.current) {
       audioRef.current = new Audio()
@@ -162,11 +162,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     }
 
     audioEngine.resume()
-    audioRef.current.src = `aura://local/track?path=${encodeURIComponent(track.path)}`
+    audioRef.current.src = `yukinon://local/track?path=${encodeURIComponent(track.path)}`
     audioRef.current.play().catch(err => {
       console.error('[Playback] Failed to play local file:', err)
       localActiveRef.current = false
-      aura.ytm.setLock?.(false)
+      yukinon.ytm.setLock?.(false)
     })
 
     audioRef.current.ontimeupdate = () => {
@@ -187,7 +187,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       artwork: null
     })
 
-    aura.library.getTrackArtwork(track.id).then((artwork) => {
+    yukinon.library.getTrackArtwork(track.id).then((artwork) => {
       setPlayer({ artwork })
     })
   }, [])
@@ -199,19 +199,19 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
           audioRef.current.pause()
           // Release the lock so the user can interact with YTM freely
           localActiveRef.current = false
-          aura.ytm.setLock?.(false)
+          yukinon.ytm.setLock?.(false)
           setPlayer({ status: 'paused' })
         } else {
           // Re-acquire the lock before resuming local
           localActiveRef.current = true
-          aura.ytm.setLock?.(true)
-          aura.ytm.pause?.()
+          yukinon.ytm.setLock?.(true)
+          yukinon.ytm.pause?.()
           audioRef.current.play()
           setPlayer({ status: 'playing' })
         }
       }
     } else {
-      aura.ytm.playPause()
+      yukinon.ytm.playPause()
     }
   }, [player])
 
@@ -254,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       setCurrentQueueIndex(nextIndex)
       playTrack(queue[nextIndex])
     } else if (player.source === 'ytm') {
-      aura.ytm.next()
+      yukinon.ytm.next()
     }
   }, [player, queue, currentQueueIndex, playTrack, playbackMode, isSmartPlay])
 
@@ -264,7 +264,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       setCurrentQueueIndex(prevIndex)
       playTrack(queue[prevIndex])
     } else if (player.source === 'ytm') {
-      aura.ytm.prev()
+      yukinon.ytm.prev()
     }
   }, [player, queue, currentQueueIndex, playTrack])
 
@@ -285,19 +285,19 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000].indexOf(Number(band)),
       gain
     )
-    aura.eq.setBand(Number(band), gain)
+    yukinon.eq.setBand(Number(band), gain)
   }, [])
 
   const applyEqPreset = useCallback((preset: EQPreset) => {
     setEqBands(preset.bands)
     setActivePresetId(preset.id)
     audioEngine.applyBands(preset.bands)
-    aura.eq.applyPreset(preset.id)
+    yukinon.eq.applyPreset(preset.id)
   }, [])
 
   const saveEqPreset = useCallback(
     async (name: string) => {
-      const saved = await aura.eq.savePreset(name, eqBands)
+      const saved = await yukinon.eq.savePreset(name, eqBands)
       setEqPresets((prev) => [...prev, saved as EQPreset])
     },
     [eqBands]
@@ -321,9 +321,9 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
             else if (prev === 'repeat-all') nextMode = 'repeat-one'
             
             if (player.source === 'ytm') {
-              if (nextMode === 'shuffle') window.aura.ytm.shuffle?.()
-              else if (nextMode.startsWith('repeat')) window.aura.ytm.repeat?.()
-              else if (nextMode === 'normal') window.aura.ytm.repeat?.() // cycle back
+              if (nextMode === 'shuffle') window.yukinon.ytm.shuffle?.()
+              else if (nextMode.startsWith('repeat')) window.yukinon.ytm.repeat?.()
+              else if (nextMode === 'normal') window.yukinon.ytm.repeat?.() // cycle back
             }
             
             return nextMode as typeof playbackMode
