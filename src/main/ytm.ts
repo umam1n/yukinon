@@ -12,7 +12,7 @@ export function getOrCreateYTMView(): BrowserView {
   ytmView = new BrowserView({
     webPreferences: {
       partition: 'persist:ytm',
-      preload: join(__dirname, '../preload/ytm.mjs'),
+      preload: join(__dirname, '../preload/ytm.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       additionalArguments: []
@@ -153,7 +153,7 @@ export function registerYTMHandlers(
     if (!ytmView) return
     await ytmView.webContents.executeJavaScript(`
       (function() {
-        const btn = document.querySelector('.play-pause-button, tp-yt-paper-icon-button[aria-label*="Play"], tp-yt-paper-icon-button[aria-label*="Pause"]');
+        const btn = document.querySelector('.play-pause-button, tp-yt-paper-icon-button#play-pause-button');
         if (btn) btn.click();
       })()
     `).catch(() => {})
@@ -163,7 +163,7 @@ export function registerYTMHandlers(
     if (!ytmView) return
     await ytmView.webContents.executeJavaScript(`
       (function() {
-        const btn = document.querySelector('.next-button, [aria-label="Next"]');
+        const btn = document.querySelector('.next-button, tp-yt-paper-icon-button.next-button');
         if (btn) btn.click();
       })()
     `).catch(() => {})
@@ -173,7 +173,7 @@ export function registerYTMHandlers(
     if (!ytmView) return
     await ytmView.webContents.executeJavaScript(`
       (function() {
-        const btn = document.querySelector('.previous-button, [aria-label="Previous"]');
+        const btn = document.querySelector('.previous-button, tp-yt-paper-icon-button.previous-button');
         if (btn) btn.click();
       })()
     `).catch(() => {})

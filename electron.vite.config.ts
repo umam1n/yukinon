@@ -19,6 +19,9 @@ export default defineConfig({
         input: {
           index: resolve('src/preload/index.ts'),
           ytm: resolve('src/preload/ytm.ts')
+        },
+        output: {
+          format: 'cjs'
         }
       }
     },
