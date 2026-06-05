@@ -90,38 +90,32 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     }
   }, [])
 
-  // Listen for real-time YTM state updates from the new event-driven architecture
+  // Listen for real-time YTM state updates
   useEffect(() => {
     if (!aura.ytm.onStateUpdate) return
     const unsub = aura.ytm.onStateUpdate((info: any) => {
-      // HARD LOCK: If local audio is the active source, completely ignore all YTM events.
-      // This prevents any race conditions regardless of IPC timing.
-      if (localActiveRef.current) {
-        // Reinforce the lock — tell the preload script to keep YTM paused
-        aura.ytm.setLock?.(true)
-        return
-      }
-
-      // YTM started playing — pause local audio and hand over control
-      if (info.isPlaying && audioRef.current && !audioRef.current.paused) {
-        audioRef.current.pause()
-        localActiveRef.current = false
-      }
-
-      setPlayerState((prev) => {
-        if (info.isPlaying || prev.source === 'ytm') {
-          return {
-            ...prev,
-            source: 'ytm',
-            status: info.isPlaying ? 'playing' : 'paused',
-            ytmInfo: { title: info.title, artist: info.artist },
-            artwork: info.artwork || prev.artwork,
-            position: info.position,
-            duration: info.duration
-          }
+      // If YTM just started playing → it wins. Pause local audio, release the mute lock, hand control to YTM.
+      if (info.isPlaying && localActiveRef.current) {
+        if (audioRef.current && !audioRef.current.paused) {
+          audioRef.current.pause()
         }
-        return prev
-      })
+        localActiveRef.current = false
+        // Unmute YTM so we can hear it
+        aura.ytm.setLock?.(false)
+      }
+
+      // Update player state for YTM if it's the active source or just became active
+      if (info.isPlaying || info.title) {
+        setPlayerState((prev) => ({
+          ...prev,
+          source: 'ytm',
+          status: info.isPlaying ? 'playing' : 'paused',
+          ytmInfo: { title: info.title, artist: info.artist },
+          artwork: info.artwork || prev.artwork,
+          position: info.position,
+          duration: info.duration
+        }))
+      }
     })
     return () => unsub()
   }, [])
@@ -155,10 +149,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   )
 
   const playTrack = useCallback(async (track: Track) => {
-    // 1. Set the hard lock ref SYNCHRONOUSLY before any async work
+    // Acquire lock synchronously before any async work
     localActiveRef.current = true
-    // 2. Also tell the preload script to enforce the lock in the YTM window
+    // Mute YTM at OS/Chromium level (setAudioMuted) AND actually pause its video
     aura.ytm.setLock?.(true)
+    aura.ytm.pause?.()
 
     if (!audioRef.current) {
       audioRef.current = new Audio()
@@ -170,7 +165,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     audioRef.current.src = `aura://local/track?path=${encodeURIComponent(track.path)}`
     audioRef.current.play().catch(err => {
       console.error('[Playback] Failed to play local file:', err)
-      // If local failed, release the lock so the user isn't stuck
       localActiveRef.current = false
       aura.ytm.setLock?.(false)
     })
@@ -211,6 +205,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
           // Re-acquire the lock before resuming local
           localActiveRef.current = true
           aura.ytm.setLock?.(true)
+          aura.ytm.pause?.()
           audioRef.current.play()
           setPlayer({ status: 'playing' })
         }

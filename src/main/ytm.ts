@@ -79,13 +79,26 @@ function buildYTMCSS(accent: string, themeMode: string): string {
     html, body, ytmusic-app,
     ytmusic-app-layout,
     ytmusic-browse-response,
-    ytmusic-nav-bar {
+    ytmusic-nav-bar,
+    ytmusic-player-page,
+    .ytmusic-player-page,
+    ytmusic-data-bound-tab-header-renderer,
+    #main-panel {
       background: ${bg} !important;
+      background-color: ${bg} !important;
       color: ${textColor} !important;
     }
     .ytmusic-app {
       --ytmusic-color-background1: ${bg} !important;
       --ytmusic-color-background2: ${bgCard} !important;
+      --ytmusic-color-black1: ${bg} !important;
+      --ytmusic-color-black4: ${bgCard} !important;
+      --yt-spec-base-background: ${bg} !important;
+      --yt-spec-raised-background: ${bgCard} !important;
+      --yt-spec-menu-background: ${bgCard} !important;
+      --ytmusic-color-white1: ${textColor} !important;
+      --ytmusic-color-grey1: ${textColor} !important;
+      --ytmusic-text-primary: ${textColor} !important;
     }
 
     /* ---- Accent color sync ---- */

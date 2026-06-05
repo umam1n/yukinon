@@ -45,10 +45,13 @@ const adObserver = new MutationObserver(() => {
     document.querySelector('.ad-showing') ||
     document.querySelector('.ytp-ad-player-overlay') ||
     document.querySelector('.ytp-ad-progress') ||
-    document.querySelector('.ytp-ad-module')
+    document.querySelector('.ytp-ad-module') ||
+    document.querySelector('.video-ads.ytp-ad-module')
   )
   const video = document.querySelector('video')
   if (isVideoAd && video && isFinite(video.duration) && video.duration > 0) {
+    video.muted = true
+    video.playbackRate = 16.0
     video.currentTime = video.duration
     console.log('[Aura YTM] Fast-forwarded unskippable ad')
   }
