@@ -77,13 +77,9 @@ function attachVideoListeners() {
   })
 
   video.addEventListener('play', () => {
-    // Check the global lock flag set by the main process via executeJavaScript
-    if ((window as any).__auraLocalLock) {
-      video.pause()
-      video.muted = true
-      console.log('[Aura YTM] Blocked YTM playback — local lock active')
-      return
-    }
+    // We removed the restrictive __auraLocalLock.
+    // If YTM plays, we just send the state update. The AppProvider will see
+    // it playing and automatically pause the local audio.
     sendStateUpdate()
   })
 

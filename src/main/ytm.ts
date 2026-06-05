@@ -196,28 +196,29 @@ export function registerYTMHandlers(
     ytmView.webContents.send('ytm:set-volume', volume)
   })
 
-  ipc.handle('ytm:setLock', async (_, isLocked: boolean) => {
+  ipc.handle('ytm:setLock', async () => {
+    // Deprecated: We now use pure event-driven pausing rather than process-level locks
+    // to allow users to switch freely between Local and YTM.
+  })
+
+  ipc.handle('ytm:shuffle', async () => {
     if (!ytmView) return
-    // setAudioMuted works at the Chromium process level — it's impossible for
-    // any JavaScript inside the page to bypass this. This is how Brave silences tabs.
-    ytmView.webContents.setAudioMuted(isLocked)
-    // We MUST also set window.__auraLocalLock so the preload script knows NOT to resume playback
     await ytmView.webContents.executeJavaScript(`
       (function() {
-        window.__auraLocalLock = ${isLocked};
-        if (${isLocked}) {
-          const video = document.querySelector('video');
-          if (video) {
-            video.pause();
-            video.muted = true;
-          }
-        } else {
-          const video = document.querySelector('video');
-          if (video) video.muted = false;
-        }
+        const btn = document.querySelector('ytmusic-player-bar tp-yt-paper-icon-button[aria-label*="Shuffle"], .shuffle-button');
+        if (btn) btn.click();
       })()
     `).catch(() => {})
-    console.log(`[YTM] Audio ${isLocked ? 'muted (local playing)' : 'unmuted (local stopped)'}`)
+  })
+
+  ipc.handle('ytm:repeat', async () => {
+    if (!ytmView) return
+    await ytmView.webContents.executeJavaScript(`
+      (function() {
+        const btn = document.querySelector('ytmusic-player-bar tp-yt-paper-icon-button[aria-label*="Repeat"], .repeat-button');
+        if (btn) btn.click();
+      })()
+    `).catch(() => {})
   })
 
   ipc.handle('ytm:seek', async (_, position: number) => {

@@ -315,10 +315,18 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         playbackMode,
         togglePlaybackMode: () => {
           setPlaybackMode((prev) => {
-            if (prev === 'normal') return 'shuffle'
-            if (prev === 'shuffle') return 'repeat-all'
-            if (prev === 'repeat-all') return 'repeat-one'
-            return 'normal'
+            let nextMode = 'normal'
+            if (prev === 'normal') nextMode = 'shuffle'
+            else if (prev === 'shuffle') nextMode = 'repeat-all'
+            else if (prev === 'repeat-all') nextMode = 'repeat-one'
+            
+            if (player.source === 'ytm') {
+              if (nextMode === 'shuffle') window.aura.ytm.shuffle?.()
+              else if (nextMode.startsWith('repeat')) window.aura.ytm.repeat?.()
+              else if (nextMode === 'normal') window.aura.ytm.repeat?.() // cycle back
+            }
+            
+            return nextMode as typeof playbackMode
           })
         },
         isSmartPlay,
