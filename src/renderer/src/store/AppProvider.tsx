@@ -158,6 +158,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
 
     if (!audioRef.current) {
       audioRef.current = new Audio()
+      audioRef.current.crossOrigin = 'anonymous'
+      audioRef.current.preload = 'metadata'
       audioEngine.initialize()
       audioEngine.connectLocalAudio(audioRef.current)
     }
@@ -171,7 +173,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     })
 
     audioRef.current.ontimeupdate = () => {
-      setPlayer({ position: audioRef.current!.currentTime })
+      const pos = Math.floor(audioRef.current!.currentTime)
+      if (player.position !== pos) {
+        setPlayer({ position: pos })
+      }
     }
     audioRef.current.onended = () => {
       playNext()

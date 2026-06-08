@@ -67,7 +67,7 @@ async function createWindow(): Promise<void> {
 
 // Register custom protocol before app is ready
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'yukinon', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } }
+  { scheme: 'yukinon', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } }
 ])
 
 function setupGlobalShortcuts(): void {
