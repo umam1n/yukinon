@@ -15,7 +15,8 @@ export function getOrCreateYTMView(): BrowserView {
       preload: join(__dirname, '../preload/ytm.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: []
+      additionalArguments: [],
+      backgroundThrottling: true
     }
   })
 
@@ -24,13 +25,24 @@ export function getOrCreateYTMView(): BrowserView {
   })
 
   ytmView.webContents.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0'
   )
 
   ytmView.webContents.loadURL('https://music.youtube.com')
 
+  const ytmSession = session.fromPartition('persist:ytm')
+
+  // Bulletproof bypass for Google Sign In
+  ytmSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0'
+    delete details.requestHeaders['sec-ch-ua']
+    delete details.requestHeaders['sec-ch-ua-mobile']
+    delete details.requestHeaders['sec-ch-ua-platform']
+    callback({ cancel: false, requestHeaders: details.requestHeaders })
+  })
+
   // Setup ad blocker for this session
-  setupAdblocker(session.fromPartition('persist:ytm')).catch((err) => {
+  setupAdblocker(ytmSession).catch((err) => {
     console.error('[Yukinon] Ad blocker failed:', err)
   })
 

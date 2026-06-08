@@ -1,5 +1,5 @@
 import { ipcMain as IpcMain, dialog, BrowserWindow, app } from 'electron'
-import { readdir, stat, mkdir, writeFile } from 'fs/promises'
+import { readdir, stat, mkdir, writeFile, readFile } from 'fs/promises'
 import { join, extname } from 'path'
 import { parseFile } from 'music-metadata'
 import { randomUUID } from 'crypto'
@@ -146,6 +146,32 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
       FROM tracks WHERE id = ?
     `).get(id)
     return row as Track | undefined
+  })
+
+  // Get local lyrics if available (from .lrc file or embedded tags)
+  ipc.handle('library:getLyrics', async (_, id: string) => {
+    const track = db.prepare('SELECT path FROM tracks WHERE id = ?').get(id) as { path: string } | undefined
+    if (!track) return null
+
+    // 1. Check for .lrc sidecar file
+    const lrcPath = track.path.replace(/\.[^.]+$/, '.lrc')
+    try {
+      if (existsSync(lrcPath)) {
+        return await readFile(lrcPath, 'utf8')
+      }
+    } catch {}
+
+    // 2. Check for embedded lyrics
+    try {
+      const metadata = await parseFile(track.path, { duration: false, skipCovers: true })
+      if (metadata.common.lyrics && metadata.common.lyrics.length > 0) {
+        // music-metadata can return array of strings or objects. We handle both.
+        const lyric = metadata.common.lyrics[0]
+        return typeof lyric === 'string' ? lyric : (lyric as any).text || null
+      }
+    } catch {}
+
+    return null
   })
 
   // Get track artwork

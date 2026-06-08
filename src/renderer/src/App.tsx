@@ -9,6 +9,8 @@ import NowPlaying from './components/NowPlaying'
 import TitleBar from './components/TitleBar'
 import PlaylistsView from './components/Playlists/PlaylistsView'
 import QueueView from './components/Queue/QueueView'
+import RadioView from './components/Radio/RadioView'
+import SubsonicView from './components/Subsonic/SubsonicView'
 import { useApp } from './store/AppContext'
 
 import FullscreenPlayer from './components/FullscreenPlayer'
@@ -36,6 +38,8 @@ function AppInner(): React.ReactElement {
           {activeView === 'library' && <LibraryView />}
           {activeView === 'playlists' && <PlaylistsView />}
           {activeView === 'queue' && <QueueView />}
+          {activeView === 'radio' && <RadioView />}
+          {activeView === 'subsonic' && <SubsonicView />}
           {activeView === 'ytm' && <YTMPlaceholder />}
           {activeView === 'eq' && <EQPanel />}
           {activeView === 'presets' && <PresetsView />}

@@ -14,8 +14,7 @@ function formatTime(secs: number): string {
 }
 
 export default function NowPlaying(): React.ReactElement {
-  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, playbackMode, togglePlaybackMode, isSmartPlay, toggleSmartPlay, setActiveView } = useApp()
-  const [volume, setVolume] = useState(0.8)
+  const { player, tracks, togglePlayPause, playNext, playPrev, seekTo, setVolume, playbackMode, togglePlaybackMode, isSmartPlay, toggleSmartPlay, setActiveView } = useApp()
   const [isMuted, setIsMuted] = useState(false)
 
   const currentTrack = tracks.find((t) => t.id === player.currentTrackId)
@@ -23,45 +22,26 @@ export default function NowPlaying(): React.ReactElement {
   const handleSeek = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const pos = Number(e.target.value)
-      setPlayer({ position: pos })
-      
-      if (player.source === 'local') {
-        const audioEl = document.querySelector('audio') as HTMLAudioElement | null
-        if (audioEl) audioEl.currentTime = pos
-      } else {
-        window.yukinon.ytm.seek?.(pos)
-      }
+      seekTo(pos)
     },
-    [setPlayer, player.source]
+    [seekTo]
   )
 
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
+    setIsMuted(v === 0)
     setVolume(v)
-    setPlayer({ volume: v }) // Store in global player state
-
-    if (player.source === 'local') {
-      import('../audio/AudioEngine').then(({ audioEngine }) => {
-        audioEngine.setVolume(v)
-      })
-    } else {
-      window.yukinon.ytm.setVolume(v)
-    }
-  }, [player.source, setPlayer])
+  }, [setVolume])
 
   const toggleMute = useCallback(() => {
     const newMuted = !isMuted
     setIsMuted(newMuted)
-    const v = newMuted ? 0 : volume
-
-    if (player.source === 'local') {
-      import('../audio/AudioEngine').then(({ audioEngine }) => {
-        audioEngine.setVolume(v)
-      })
+    if (newMuted) {
+      setVolume(0)
     } else {
-      window.yukinon.ytm.setVolume(v)
+      setVolume(0.8)
     }
-  }, [isMuted, volume, player.source])
+  }, [isMuted, setVolume])
 
   const progressPercent =
     player.duration > 0 ? (player.position / player.duration) * 100 : 0
@@ -120,10 +100,12 @@ export default function NowPlaying(): React.ReactElement {
         <div
           style={{
             height: '100%',
-            width: `${progressPercent}%`,
+            width: '100%',
             background: `linear-gradient(90deg, var(--color-accent), var(--color-accent-2))`,
             borderRadius: 100,
-            transition: 'width 0.3s linear'
+            transform: `scaleX(${progressPercent / 100})`,
+            transformOrigin: 'left',
+            transition: 'transform 0.3s linear'
           }}
         />
       </div>
@@ -175,6 +157,10 @@ export default function NowPlaying(): React.ReactElement {
           >
             {player.source === 'ytm'
               ? player.ytmInfo?.title || 'YouTube Music'
+              : player.source === 'radio'
+              ? player.radioInfo?.title || 'Internet Radio'
+              : player.source === 'subsonic'
+              ? player.subsonicInfo?.title || 'Navidrome'
               : currentTrack?.title || 'Nothing playing'}
           </div>
           <div
@@ -188,6 +174,10 @@ export default function NowPlaying(): React.ReactElement {
           >
             {player.source === 'ytm'
               ? player.ytmInfo?.artist || ''
+              : player.source === 'radio'
+              ? player.radioInfo?.station || ''
+              : player.source === 'subsonic'
+              ? player.subsonicInfo?.artist || ''
               : currentTrack?.artist || '—'}
           </div>
           {currentTrack && player.source === 'local' && (
@@ -289,7 +279,7 @@ export default function NowPlaying(): React.ReactElement {
           min={0}
           max={1}
           step={0.01}
-          value={isMuted ? 0 : volume}
+          value={isMuted ? 0 : player.volume ?? 0.8}
           onChange={handleVolume}
           style={{
             flex: 1,

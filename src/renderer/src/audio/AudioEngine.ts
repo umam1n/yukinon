@@ -14,8 +14,7 @@ class AudioEngine {
   private ctx: AudioContext | null = null
   private filters: BiquadFilterNode[] = []
   private masterGain: GainNode | null = null
-  private localSource: MediaElementAudioSourceNode | null = null
-  private localAudioEl: HTMLAudioElement | null = null
+  private localSources: Map<HTMLAudioElement, MediaElementAudioSourceNode> = new Map()
 
   initialize(): AudioContext {
     if (this.ctx) return this.ctx
@@ -49,15 +48,14 @@ class AudioEngine {
 
   connectLocalAudio(audioEl: HTMLAudioElement): void {
     if (!this.ctx) this.initialize()
-    if (this.localAudioEl === audioEl) return // Already connected
-
-    if (this.localSource) {
-      this.localSource.disconnect()
+    
+    if (this.localSources.has(audioEl)) {
+      return // Already created and connected
     }
 
-    this.localAudioEl = audioEl
-    this.localSource = this.ctx!.createMediaElementSource(audioEl)
-    this.localSource.connect(this.filters[0])
+    const source = this.ctx!.createMediaElementSource(audioEl)
+    source.connect(this.filters[0])
+    this.localSources.set(audioEl, source)
     console.log('[AudioEngine] Local audio connected to EQ chain')
   }
 
@@ -80,8 +78,16 @@ class AudioEngine {
     this.masterGain.gain.setTargetAtTime(volume, this.ctx!.currentTime, 0.02)
   }
 
+  suspend(): void {
+    if (this.ctx && this.ctx.state === 'running') {
+      this.ctx.suspend().catch(console.error)
+    }
+  }
+
   resume(): void {
-    this.ctx?.resume()
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(console.error)
+    }
   }
 
   getBandGains(): number[] {

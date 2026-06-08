@@ -72,7 +72,7 @@ export interface AppTheme {
 }
 
 export interface PlayerState {
-  source: 'local' | 'ytm'
+  source: 'local' | 'ytm' | 'radio' | 'subsonic'
   status: 'playing' | 'paused' | 'stopped'
   currentTrackId: string | null
   position: number
@@ -80,6 +80,8 @@ export interface PlayerState {
   volume: number
   artwork?: string | null
   ytmInfo?: { title: string; artist: string }
+  radioInfo?: { title: string; station: string }
+  subsonicInfo?: { title: string; artist: string }
 }
 
 export type IpcChannels =

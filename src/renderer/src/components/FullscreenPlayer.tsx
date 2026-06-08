@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Music2, Shuffle, Repeat, Repeat1, Minimize2
+  Music2, Shuffle, Repeat, Repeat1, Minimize2, ListMusic
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
+import { fetchLyrics, parseLRC, type LyricLine } from '../lib/lyrics'
 
 function formatTime(secs: number): string {
   if (!secs || isNaN(secs)) return '0:00'
@@ -13,11 +14,50 @@ function formatTime(secs: number): string {
 }
 
 export default function FullscreenPlayer(): React.ReactElement {
-  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, playbackMode, togglePlaybackMode, setActiveView } = useApp()
-  const [volume, setVolume] = useState(0.8)
+  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, playbackMode, togglePlaybackMode, setActiveView, setVolume } = useApp()
   const [isMuted, setIsMuted] = useState(false)
-
+  const [showLyrics, setShowLyrics] = useState(false)
+  const [lyrics, setLyrics] = useState<LyricLine[]>([])
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false)
+  const [isPlainLyrics, setIsPlainLyrics] = useState(false)
+  
   const currentTrack = tracks.find((t) => t.id === player.currentTrackId)
+  const lyricsContainerRef = React.useRef<HTMLDivElement>(null)
+  const activeLyricRef = React.useRef<HTMLDivElement>(null)
+
+  const title = player.source === 'ytm' ? player.ytmInfo?.title || 'YouTube Music' : player.source === 'radio' ? player.radioInfo?.title || 'Internet Radio' : player.source === 'subsonic' ? player.subsonicInfo?.title || 'Navidrome' : currentTrack?.title || 'Nothing playing'
+  const artist = player.source === 'ytm' ? player.ytmInfo?.artist || '' : player.source === 'radio' ? player.radioInfo?.station || '' : player.source === 'subsonic' ? player.subsonicInfo?.artist || '' : currentTrack?.artist || '—'
+  const artwork = player.artwork
+
+  React.useEffect(() => {
+    if (!showLyrics) return
+    let isMounted = true
+
+    async function loadLyrics() {
+      setIsLoadingLyrics(true)
+      setLyrics([])
+      setIsPlainLyrics(false)
+      const raw = await fetchLyrics(player.source, player.currentTrackId, title, artist, player.duration)
+      if (isMounted) {
+        if (raw) {
+          const parsed = parseLRC(raw)
+          setLyrics(parsed)
+          setIsPlainLyrics(parsed.every(l => l.time === -1))
+        }
+        setIsLoadingLyrics(false)
+      }
+    }
+
+    loadLyrics()
+    return () => { isMounted = false }
+  }, [showLyrics, player.currentTrackId, title, artist, player.duration, player.source])
+
+  // Scroll to active lyric
+  React.useEffect(() => {
+    if (showLyrics && !isPlainLyrics && activeLyricRef.current && lyricsContainerRef.current) {
+      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [player.position, showLyrics, isPlainLyrics])
 
   const handleSeek = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,37 +76,33 @@ export default function FullscreenPlayer(): React.ReactElement {
 
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
+    setIsMuted(v === 0)
     setVolume(v)
-    setPlayer({ volume: v })
-
-    if (player.source === 'local') {
-      import('../audio/AudioEngine').then(({ audioEngine }) => {
-        audioEngine.setVolume(v)
-      })
-    } else {
-      window.yukinon.ytm.setVolume?.(v)
-    }
-  }, [player.source, setPlayer])
+  }, [setVolume])
 
   const toggleMute = useCallback(() => {
     const newMuted = !isMuted
     setIsMuted(newMuted)
-    const v = newMuted ? 0 : volume
-
-    if (player.source === 'local') {
-      import('../audio/AudioEngine').then(({ audioEngine }) => {
-        audioEngine.setVolume(v)
-      })
+    if (newMuted) {
+      setVolume(0)
     } else {
-      window.yukinon.ytm.setVolume?.(v)
+      setVolume(0.8) // default fallback when unmuting if volume was 0
     }
-  }, [isMuted, volume, player.source])
+  }, [isMuted, setVolume])
 
   const progressPercent = player.duration > 0 ? (player.position / player.duration) * 100 : 0
-  
-  const title = player.source === 'ytm' ? player.ytmInfo?.title || 'YouTube Music' : currentTrack?.title || 'Nothing playing'
-  const artist = player.source === 'ytm' ? player.ytmInfo?.artist || '' : currentTrack?.artist || '—'
-  const artwork = player.artwork
+
+  // Calculate active lyric index
+  let activeLyricIndex = -1
+  if (!isPlainLyrics && lyrics.length > 0) {
+    for (let i = 0; i < lyrics.length; i++) {
+      if (player.position >= lyrics[i].time) {
+        activeLyricIndex = i
+      } else {
+        break
+      }
+    }
+  }
 
   return (
     <div style={{
@@ -100,7 +136,12 @@ export default function FullscreenPlayer(): React.ReactElement {
       {/* Top Bar with Minimize Button */}
       <div style={{ padding: '32px', display: 'flex', justifyContent: 'flex-end', zIndex: 10 }}>
         <button
-          onClick={() => setActiveView('library')} // Go back to library (or previous view)
+          onClick={() => {
+            if (player.source === 'ytm') setActiveView('ytm')
+            else if (player.source === 'radio') setActiveView('radio')
+            else if (player.source === 'subsonic') setActiveView('subsonic')
+            else setActiveView('library')
+          }}
           style={{
             background: 'rgba(255,255,255,0.1)',
             border: 'none',
@@ -143,9 +184,16 @@ export default function FullscreenPlayer(): React.ReactElement {
           )}
         </div>
 
-        {/* Right Side: Track Info & Controls */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, maxWidth: 600 }}>
-          <div style={{ fontSize: 48, fontWeight: 800, marginBottom: 8, lineHeight: 1.2, textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
+        {/* Right Side: Track Info & Controls OR Lyrics */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, maxWidth: 600, height: 'min(500px, 45vh)', position: 'relative' }}>
+          
+          {/* Default Controls View */}
+          <div style={{ 
+            display: 'flex', flexDirection: 'column', height: '100%',
+            opacity: showLyrics ? 0 : 1, pointerEvents: showLyrics ? 'none' : 'auto',
+            transition: 'opacity 0.3s ease', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 
+          }}>
+            <div style={{ fontSize: 48, fontWeight: 800, marginBottom: 8, lineHeight: 1.2, textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
             {title}
           </div>
           <div style={{ fontSize: 24, color: 'var(--text-muted)', marginBottom: 40, fontWeight: 500 }}>
@@ -214,9 +262,14 @@ export default function FullscreenPlayer(): React.ReactElement {
               <SkipForward size={36} />
             </button>
             
-            {/* Placeholder for future Lyrics button */}
-            <button title="Lyrics (Coming Soon)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)' }}>
-              <div style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid currentColor', borderRadius: 4, fontSize: 12, fontWeight: 'bold' }}>L</div>
+            <button 
+              onClick={() => setShowLyrics(true)}
+              title="Lyrics" 
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', transition: 'color 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
+            >
+              <ListMusic size={24} />
             </button>
           </div>
 
@@ -228,10 +281,63 @@ export default function FullscreenPlayer(): React.ReactElement {
             <input
               type="range"
               min={0} max={1} step={0.01}
-              value={isMuted ? 0 : volume}
+              value={isMuted ? 0 : player.volume ?? 0.8}
               onChange={handleVolume}
               style={{ flex: 1, height: 6, accentColor: 'var(--text)', cursor: 'pointer' }}
             />
+          </div>
+        </div>
+
+        {/* Lyrics View */}
+          <div style={{
+            opacity: showLyrics ? 1 : 0, pointerEvents: showLyrics ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Lyrics</h2>
+              <button 
+                onClick={() => setShowLyrics(false)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text)', padding: '6px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 14 }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div ref={lyricsContainerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: 16, scrollBehavior: 'smooth', WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)' }}>
+              {isLoadingLyrics ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+                  Loading lyrics...
+                </div>
+              ) : lyrics.length > 0 ? (
+                <div style={{ padding: '40px 0 100px 0', display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {lyrics.map((line, index) => {
+                    const isActive = activeLyricIndex === index
+                    return (
+                      <div
+                        key={index}
+                        ref={isActive ? activeLyricRef : null}
+                        style={{
+                          fontSize: isActive || isPlainLyrics ? 28 : 24,
+                          fontWeight: isActive || isPlainLyrics ? 800 : 500,
+                          color: isActive || isPlainLyrics ? 'var(--text)' : 'rgba(255,255,255,0.3)',
+                          transition: 'all 0.3s ease',
+                          transformOrigin: 'left',
+                          transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                          lineHeight: 1.4
+                        }}
+                      >
+                        {line.text || ' '}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+                  No lyrics found for this track.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

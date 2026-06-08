@@ -1,6 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { AppContext, type AppStore } from './AppContext'
 import { audioEngine } from '../audio/AudioEngine'
+import { LocalPlayer } from '../audio/LocalPlayer'
+import { YTMPlayer } from '../audio/YTMPlayer'
+import { RadioPlayer } from '../audio/RadioPlayer'
+import { SubsonicPlayer } from '../audio/SubsonicPlayer'
+import type { IPlayerProvider } from '../audio/IPlayerProvider'
 import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '../../../../shared/types'
 
 const yukinon = window.yukinon
@@ -11,9 +16,12 @@ const DEFAULT_BANDS: EQBands = {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }): React.ReactElement {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  // Source-of-truth lock: if true, local audio is playing and ALL YTM state updates are ignored
-  const localActiveRef = useRef(false)
+  // Orchestrator State
+  const localPlayerRef = useRef<LocalPlayer | null>(null)
+  const ytmPlayerRef = useRef<YTMPlayer | null>(null)
+  const radioPlayerRef = useRef<RadioPlayer | null>(null)
+  const subsonicPlayerRef = useRef<SubsonicPlayer | null>(null)
+  const activePlayerRef = useRef<IPlayerProvider | null>(null)
 
   const [tracks, setTracks] = useState<Track[]>([])
   const [queue, setQueueState] = useState<Track[]>([])
@@ -29,6 +37,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [activeView, setActiveView] = useState<AppStore['activeView']>('library')
   const [playbackMode, setPlaybackMode] = useState<'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'>('normal')
   const [isSmartPlay, setIsSmartPlay] = useState(false)
+  
   const [player, setPlayerState] = useState<PlayerState>({
     source: 'local',
     status: 'stopped',
@@ -38,87 +47,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     volume: 0.8
   })
 
+  // Prevent React re-render cascades by keeping a mutable ref of the state
+  const playerStateRef = useRef(player)
   const setPlayer = useCallback((state: Partial<PlayerState>) => {
-    setPlayerState((prev) => ({ ...prev, ...state }))
-  }, [])
-
-  // Initialize on mount
-  useEffect(() => {
-    // Load theme
-    yukinon.theme.get().then((t: AppTheme) => {
-      setThemeState(t)
-      applyThemeToDOM(t)
-    })
-
-    // Load library
-    yukinon.library.getTracks().then(setTracks)
-
-    // Load EQ state
-    Promise.all([yukinon.eq.getBands(), yukinon.eq.getPresets(), yukinon.eq.getActivePresetId()]).then(
-      ([bands, presets, presetId]) => {
-        setEqBands(bands as EQBands)
-        setEqPresets(presets as EQPreset[])
-        setActivePresetId(presetId as string)
-        audioEngine.initialize()
-        audioEngine.applyBands(bands as EQBands)
-      }
-    )
-
-    // Listen for EQ band changes from main process
-    const unsub = yukinon.eq.onBandsChanged((bands) => {
-      setEqBands(bands as EQBands)
-      audioEngine.applyBands(bands as EQBands)
-    })
-
-    // Listen for theme changes
-    const unsubTheme = yukinon.theme.onChange((t) => {
-      setThemeState((prev) => ({ ...prev, ...(t as Partial<AppTheme>) }))
-      applyThemeToDOM({ ...theme, ...(t as Partial<AppTheme>) })
-    })
-
-    // Media key listeners
-    const unsubPlay = yukinon.media.onPlayPause(togglePlayPause)
-    const unsubNext = yukinon.media.onNext(playNext)
-    const unsubPrev = yukinon.media.onPrev(playPrev)
-
-    return () => {
-      unsub()
-      unsubTheme()
-      unsubPlay()
-      unsubNext()
-      unsubPrev()
-    }
-  }, [])
-
-  // Listen for real-time YTM state updates
-  useEffect(() => {
-    if (!yukinon.ytm.onStateUpdate) return
-    const unsub = yukinon.ytm.onStateUpdate((info: any) => {
-      console.log('[Frontend] Received ytm:state-update:', info)
-      // If YTM just started playing → it wins. Pause local audio, release the mute lock, hand control to YTM.
-      if (info.isPlaying && localActiveRef.current) {
-        if (audioRef.current && !audioRef.current.paused) {
-          audioRef.current.pause()
-        }
-        localActiveRef.current = false
-        // Unmute YTM so we can hear it
-        yukinon.ytm.setLock?.(false)
-      }
-
-      // Update player state for YTM if it's the active source or just became active
-      if (info.isPlaying || info.title) {
-        setPlayerState((prev) => ({
-          ...prev,
-          source: 'ytm',
-          status: info.isPlaying ? 'playing' : 'paused',
-          ytmInfo: { title: info.title, artist: info.artist },
-          artwork: info.artwork || prev.artwork,
-          position: info.position,
-          duration: info.duration
-        }))
-      }
-    })
-    return () => unsub()
+    playerStateRef.current = { ...playerStateRef.current, ...state }
+    setPlayerState(playerStateRef.current)
   }, [])
 
   // Apply theme to DOM
@@ -128,7 +61,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     root.classList.add(t.mode)
     root.style.setProperty('--color-accent', t.accentColor)
 
-    // Convert hex accent to RGB for alpha usage
     const hex = t.accentColor.replace('#', '')
     const r = parseInt(hex.substring(0, 2), 16)
     const g = parseInt(hex.substring(2, 4), 16)
@@ -143,92 +75,77 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       setThemeState(newTheme)
       applyThemeToDOM(newTheme)
       yukinon.theme.set(updates)
-      // Sync YTM theme: dark/light + accent color
       yukinon.ytm.setTheme?.(newTheme.accentColor, newTheme.mode)
     },
     [theme, applyThemeToDOM]
   )
 
   const playTrack = useCallback(async (track: Track) => {
-    // Acquire lock synchronously before any async work
-    localActiveRef.current = true
-    // Mute YTM at OS/Chromium level (setAudioMuted) AND actually pause its video
+    // Switch orchestrator to Local
+    activePlayerRef.current = localPlayerRef.current
+    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
+
+    // Pause other players
     yukinon.ytm.setLock?.(true)
-    yukinon.ytm.pause?.()
+    ytmPlayerRef.current?.pause()
+    radioPlayerRef.current?.pause()
+    subsonicPlayerRef.current?.pause()
 
-    if (!audioRef.current) {
-      audioRef.current = new Audio()
-      audioRef.current.crossOrigin = 'anonymous'
-      audioRef.current.preload = 'metadata'
-      audioEngine.initialize()
-      audioEngine.connectLocalAudio(audioRef.current)
-    }
-
-    audioEngine.resume()
-    audioRef.current.src = `yukinon://local/track?path=${encodeURIComponent(track.path)}`
-    audioRef.current.play().catch(err => {
-      console.error('[Playback] Failed to play local file:', err)
-      localActiveRef.current = false
-      yukinon.ytm.setLock?.(false)
-    })
-
-    audioRef.current.ontimeupdate = () => {
-      const pos = Math.floor(audioRef.current!.currentTime)
-      if (player.position !== pos) {
-        setPlayer({ position: pos })
-      }
-    }
-    audioRef.current.onended = () => {
-      playNext()
-    }
-    audioRef.current.onloadedmetadata = () => {
-      setPlayer({ duration: audioRef.current!.duration })
-    }
-
-    setPlayer({
-      source: 'local',
-      status: 'playing',
-      currentTrackId: track.id,
-      duration: track.duration,
-      artwork: null
-    })
-
+    setPlayer({ source: 'local' })
+    
+    await localPlayerRef.current?.play(track)
+    
+    // Fetch artwork asynchronously
     yukinon.library.getTrackArtwork(track.id).then((artwork) => {
       setPlayer({ artwork })
     })
-  }, [])
+  }, [setPlayer])
 
-  const togglePlayPause = useCallback(() => {
-    if (player.source === 'local') {
-      if (audioRef.current) {
-        if (player.status === 'playing') {
-          audioRef.current.pause()
-          // Release the lock so the user can interact with YTM freely
-          localActiveRef.current = false
-          yukinon.ytm.setLock?.(false)
-          setPlayer({ status: 'paused' })
-        } else {
-          // Re-acquire the lock before resuming local
-          localActiveRef.current = true
-          yukinon.ytm.setLock?.(true)
-          yukinon.ytm.pause?.()
-          audioRef.current.play()
-          setPlayer({ status: 'playing' })
-        }
-      }
-    } else {
-      yukinon.ytm.playPause()
-    }
-  }, [player])
+  const playRadio = useCallback(async (url: string, info: { title: string, station: string, artwork?: string }) => {
+    // Switch orchestrator to Radio
+    activePlayerRef.current = radioPlayerRef.current
+    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
+    
+    // Pause other players
+    yukinon.ytm.setLock?.(true)
+    ytmPlayerRef.current?.pause()
+    localPlayerRef.current?.pause()
+    subsonicPlayerRef.current?.pause()
 
+    setPlayer({ source: 'radio' })
+    
+    radioPlayerRef.current?.play(url, info)
+  }, [setPlayer])
+
+  const playSubsonic = useCallback(async (id: string, info: { title: string, artist: string, duration?: number, artwork?: string }) => {
+    // Switch orchestrator to Subsonic
+    activePlayerRef.current = subsonicPlayerRef.current
+    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
+
+    // Pause other players
+    yukinon.ytm.setLock?.(true)
+    ytmPlayerRef.current?.pause()
+    localPlayerRef.current?.pause()
+    radioPlayerRef.current?.pause()
+
+    setPlayer({ source: 'subsonic' })
+
+    await subsonicPlayerRef.current?.play(id, info)
+  }, [setPlayer])
+
+  const playNextRef = useRef<() => void>()
   const playNext = useCallback(() => {
-    if (player.source === 'local' && queue.length > 0) {
+    if (activePlayerRef.current === ytmPlayerRef.current) {
+      activePlayerRef.current?.next?.()
+      return
+    }
+
+    if (activePlayerRef.current === localPlayerRef.current && queue.length > 0) {
       let nextIndex = currentQueueIndex
 
       if (playbackMode === 'repeat-one') {
         // Just play the exact same index again
       } else if (isSmartPlay) {
-        // Smart play: favor tracks with high playCount and isFavorite
         const candidates = queue.map((t, i) => {
           let score = 1
           if (t.isFavorite) score += 5
@@ -247,10 +164,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       } else if (playbackMode === 'shuffle') {
         nextIndex = Math.floor(Math.random() * queue.length)
       } else {
-        // Normal or Repeat-All
         if (currentQueueIndex + 1 >= queue.length && playbackMode === 'normal') {
-          // Stop at the end of the queue
-          audioRef.current?.pause()
+          activePlayerRef.current?.pause()
           setPlayer({ status: 'stopped', position: 0 })
           return
         }
@@ -259,20 +174,55 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
 
       setCurrentQueueIndex(nextIndex)
       playTrack(queue[nextIndex])
-    } else if (player.source === 'ytm') {
-      yukinon.ytm.next()
     }
-  }, [player, queue, currentQueueIndex, playTrack, playbackMode, isSmartPlay])
+  }, [queue, currentQueueIndex, playbackMode, isSmartPlay, playTrack, setPlayer])
+  
+  // Keep ref up to date
+  useEffect(() => { playNextRef.current = playNext }, [playNext])
 
   const playPrev = useCallback(() => {
-    if (player.source === 'local' && queue.length > 0) {
+    if (activePlayerRef.current === ytmPlayerRef.current) {
+      activePlayerRef.current?.prev?.()
+      return
+    }
+
+    if (activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current) {
+      return // Radio and currently Subsonic cannot seek/skip via queue yet
+    }
+
+    if (activePlayerRef.current === localPlayerRef.current && queue.length > 0) {
       const prevIndex = (currentQueueIndex - 1 + queue.length) % queue.length
       setCurrentQueueIndex(prevIndex)
       playTrack(queue[prevIndex])
-    } else if (player.source === 'ytm') {
-      yukinon.ytm.prev()
     }
-  }, [player, queue, currentQueueIndex, playTrack])
+  }, [queue, currentQueueIndex, playTrack])
+
+  const togglePlayPause = useCallback(() => {
+    if (activePlayerRef.current) {
+      if (playerStateRef.current.status === 'playing') {
+        activePlayerRef.current.pause()
+        if (activePlayerRef.current === localPlayerRef.current) {
+          yukinon.ytm.setLock?.(false) // Release lock so user can interact with YTM freely
+        }
+      } else {
+        if (activePlayerRef.current === localPlayerRef.current || activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current) {
+          yukinon.ytm.setLock?.(true)
+          ytmPlayerRef.current?.pause()
+        }
+        activePlayerRef.current.resume()
+      }
+    }
+  }, [])
+
+  const seekTo = useCallback((position: number) => {
+    activePlayerRef.current?.seek(position)
+    setPlayer({ position })
+  }, [setPlayer])
+
+  const setVolume = useCallback((volume: number) => {
+    activePlayerRef.current?.setVolume(volume)
+    setPlayer({ volume })
+  }, [setPlayer])
 
   const setQueue = useCallback(
     (newQueue: Track[], startIndex = 0) => {
@@ -284,6 +234,104 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     },
     [playTrack]
   )
+
+  // Initialize Players and Global Listeners
+  useEffect(() => {
+    localPlayerRef.current = new LocalPlayer()
+    ytmPlayerRef.current = new YTMPlayer()
+    radioPlayerRef.current = new RadioPlayer()
+    subsonicPlayerRef.current = new SubsonicPlayer()
+    activePlayerRef.current = localPlayerRef.current
+
+    // Subscribe to LocalPlayer
+    const unsubLocal = localPlayerRef.current.onStateChange((state) => {
+      if (activePlayerRef.current === localPlayerRef.current) {
+        setPlayer(state)
+        if (state.status === 'stopped') {
+          playNextRef.current?.()
+        }
+      }
+    })
+
+    // Subscribe to YTMPlayer
+    const unsubYTM = ytmPlayerRef.current.onStateChange((state) => {
+      // If YTM starts playing, it steals the orchestrator focus
+      if (state.status === 'playing' && activePlayerRef.current !== ytmPlayerRef.current) {
+        localPlayerRef.current?.pause()
+        activePlayerRef.current = ytmPlayerRef.current
+        yukinon.ytm.setLock?.(false)
+      }
+      // Update UI if YTM is the active source or if it's broadcasting metadata
+      if (activePlayerRef.current === ytmPlayerRef.current || state.status === 'playing' || state.ytmInfo) {
+         setPlayer(state)
+      }
+    })
+
+    // Subscribe to RadioPlayer
+    const unsubRadio = radioPlayerRef.current.onStateChange((state) => {
+      if (activePlayerRef.current === radioPlayerRef.current) {
+        setPlayer(state)
+      }
+    })
+
+    // Subscribe to SubsonicPlayer
+    const unsubSubsonic = subsonicPlayerRef.current.onStateChange((state) => {
+      if (activePlayerRef.current === subsonicPlayerRef.current) {
+        setPlayer(state)
+        if (state.status === 'stopped') {
+          playNextRef.current?.()
+        }
+      }
+    })
+
+    // Initial setup
+    yukinon.theme.get().then((t: AppTheme) => {
+      setThemeState(t)
+      applyThemeToDOM(t)
+    })
+
+    yukinon.library.getTracks().then(setTracks)
+
+    Promise.all([yukinon.eq.getBands(), yukinon.eq.getPresets(), yukinon.eq.getActivePresetId()]).then(
+      ([bands, presets, presetId]) => {
+        setEqBands(bands as EQBands)
+        setEqPresets(presets as EQPreset[])
+        setActivePresetId(presetId as string)
+        audioEngine.applyBands(bands as EQBands)
+      }
+    )
+
+    const unsubEq = yukinon.eq.onBandsChanged((bands) => {
+      setEqBands(bands as EQBands)
+      audioEngine.applyBands(bands as EQBands)
+    })
+
+    const unsubTheme = yukinon.theme.onChange((t) => {
+      setThemeState((prev) => ({ ...prev, ...(t as Partial<AppTheme>) }))
+      applyThemeToDOM({ ...theme, ...(t as Partial<AppTheme>) })
+    })
+
+    // Media keys
+    const unsubPlay = yukinon.media.onPlayPause(togglePlayPause)
+    const unsubNext = yukinon.media.onNext(() => playNextRef.current?.())
+    const unsubPrev = yukinon.media.onPrev(playPrev)
+
+    return () => {
+      unsubLocal()
+      unsubYTM()
+      unsubRadio()
+      unsubSubsonic()
+      localPlayerRef.current?.destroy()
+      ytmPlayerRef.current?.destroy()
+      radioPlayerRef.current?.destroy()
+      subsonicPlayerRef.current?.destroy()
+      unsubEq()
+      unsubTheme()
+      unsubPlay()
+      unsubNext()
+      unsubPrev()
+    }
+  }, []) // We use refs for functions inside to prevent re-initializing players
 
   const setEqBand = useCallback((band: keyof EQBands, gain: number) => {
     setEqBands((prev) => ({ ...prev, [band]: gain }))
@@ -314,7 +362,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       value={{
         tracks, setTracks,
         player, setPlayer,
-        playTrack, togglePlayPause, playNext, playPrev,
+        playTrack, playRadio, playSubsonic, togglePlayPause, playNext, playPrev, seekTo, setVolume,
         queue,
         setQueue,
         currentQueueIndex,
@@ -326,10 +374,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
             else if (prev === 'shuffle') nextMode = 'repeat-all'
             else if (prev === 'repeat-all') nextMode = 'repeat-one'
             
-            if (player.source === 'ytm') {
-              if (nextMode === 'shuffle') window.yukinon.ytm.shuffle?.()
-              else if (nextMode.startsWith('repeat')) window.yukinon.ytm.repeat?.()
-              else if (nextMode === 'normal') window.yukinon.ytm.repeat?.() // cycle back
+            if (activePlayerRef.current === ytmPlayerRef.current) {
+              if (nextMode === 'shuffle') activePlayerRef.current?.shuffle?.()
+              else if (nextMode.startsWith('repeat')) activePlayerRef.current?.repeat?.()
+              else if (nextMode === 'normal') activePlayerRef.current?.repeat?.() // cycle back
             }
             
             return nextMode as typeof playbackMode

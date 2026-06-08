@@ -7,7 +7,9 @@ import {
   Settings,
   Music2,
   ListMusic,
-  List
+  List,
+  Radio,
+  Cloud
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
 import type { AppStore } from '../store/AppContext'
@@ -23,6 +25,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'playlists', icon: <ListMusic size={20} />, label: 'Playlists' },
   { id: 'queue', icon: <List size={20} />, label: 'Queue' },
   { id: 'ytm', icon: <Youtube size={20} />, label: 'YouTube Music' },
+  { id: 'radio', icon: <Radio size={20} />, label: 'Internet Radio' },
+  { id: 'subsonic', icon: <Cloud size={20} />, label: 'Navidrome' },
   { id: 'eq', icon: <Sliders size={20} />, label: 'Equalizer' },
   { id: 'presets', icon: <Star size={20} />, label: 'Presets' },
   { id: 'settings', icon: <Settings size={20} />, label: 'Settings' }

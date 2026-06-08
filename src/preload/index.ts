@@ -16,6 +16,7 @@ const api = {
     getTracks: () => ipcRenderer.invoke('library:getTracks'),
     getTrack: (id: string) => ipcRenderer.invoke('library:getTrack', id),
     getTrackArtwork: (id: string) => ipcRenderer.invoke('library:getTrackArtwork', id),
+    getLyrics: (id: string) => ipcRenderer.invoke('library:getLyrics', id),
     removeTrack: (id: string) => ipcRenderer.invoke('library:removeTrack', id),
     getFolders: () => ipcRenderer.invoke('library:getFolders'),
     removeFolder: (folderPath: string) => ipcRenderer.invoke('library:removeFolder', folderPath),
@@ -100,6 +101,18 @@ const api = {
       return () => ipcRenderer.removeListener('media:prev', cb)
     }
   },
+
+  // Utilities
+  utils: {
+    md5: (text: string) => ipcRenderer.invoke('utils:md5', text)
+  },
+
+  // Settings
+  settings: {
+    get: (key: string) => ipcRenderer.invoke('settings:get', key),
+    set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value)
+  },
+
   platform: process.platform
 }
 

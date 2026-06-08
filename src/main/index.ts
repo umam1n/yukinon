@@ -7,12 +7,20 @@ import { registerEQHandlers } from './ipc/eq'
 import { registerDeviceHandlers } from './ipc/devices'
 import { registerThemeHandlers } from './ipc/theme'
 import { registerYTMHandlers, ytmView } from './ytm'
-import { initDatabase } from './db'
+import { initDatabase, getSetting, setSetting } from './db'
+import crypto from 'crypto'
 
 let mainWindow: BrowserWindow
 
-// Disable hardware acceleration to prevent UI freezing on Linux
-app.disableHardwareAcceleration()
+// Hardware Acceleration is critical for CSS performance (blur, gradients, transform)
+// app.disableHardwareAcceleration()
+
+// Optimize GPU rendering and memory
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('ignore-gpu-blocklist') // Force GPU on Linux even if driver is unrecognized
+app.commandLine.appendSwitch('log-level', '3') // Suppress internal Chromium/VSync errors/warnings
+app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint') // Bypass Google Sign-In blocking
 
 async function createWindow(): Promise<void> {
   await initDatabase()
@@ -67,7 +75,7 @@ async function createWindow(): Promise<void> {
 
 // Register custom protocol before app is ready
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'yukinon', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } }
+  { scheme: 'yukinon', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } }
 ])
 
 function setupGlobalShortcuts(): void {
@@ -83,17 +91,37 @@ function setupGlobalShortcuts(): void {
 }
 
 app.whenReady().then(async () => {
-  protocol.handle('yukinon', (request) => {
+  protocol.handle('yukinon', async (request) => {
     try {
       const url = new URL(request.url)
       const filePath = url.searchParams.get('path')
       if (!filePath) {
         return new Response('Missing path parameter', { status: 400 })
       }
-      // Return net.fetch directly to preserve native Range request handling
-      return net.fetch(pathToFileURL(filePath).toString(), {
+
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': '*'
+          }
+        })
+      }
+
+      const response = await net.fetch(pathToFileURL(filePath).toString(), {
         method: request.method,
         headers: request.headers
+      })
+
+      const responseHeaders = new Headers(response.headers)
+      responseHeaders.set('Access-Control-Allow-Origin', '*')
+
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders
       })
     } catch (err) {
       console.error('[Protocol] Error handling yukinon protocol request:', err)
@@ -115,6 +143,15 @@ app.whenReady().then(async () => {
   registerDeviceHandlers(ipcMain)
   registerThemeHandlers(ipcMain, mainWindow)
   registerYTMHandlers(ipcMain, mainWindow)
+
+  // Utilities
+  ipcMain.handle('utils:md5', (_, text: string) => {
+    return crypto.createHash('md5').update(text).digest('hex')
+  })
+
+  // Settings
+  ipcMain.handle('settings:get', (_, key: string) => getSetting(key))
+  ipcMain.handle('settings:set', (_, key: string, value: any) => setSetting(key, value))
 
   // Window controls
   ipcMain.handle('window:minimize', () => mainWindow.minimize())

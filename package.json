@@ -8,7 +8,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_OPTIONS=\"--max-old-space-size=4096\" electron-vite dev",
+    "dev": "NODE_OPTIONS=\"--max-old-space-size=4096\" node scripts/dev.cjs",
     "build": "NODE_OPTIONS=\"--max-old-space-size=4096\" electron-vite build",
     "preview": "electron-vite preview",
     "package": "npm run build && electron-builder",
