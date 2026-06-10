@@ -5,6 +5,7 @@ import { LocalPlayer } from '../audio/LocalPlayer'
 import { YTMPlayer } from '../audio/YTMPlayer'
 import { RadioPlayer } from '../audio/RadioPlayer'
 import { SubsonicPlayer } from '../audio/SubsonicPlayer'
+import { JellyfinPlayer } from '../audio/JellyfinPlayer'
 import type { IPlayerProvider } from '../audio/IPlayerProvider'
 import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '../../../../shared/types'
 
@@ -21,6 +22,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const ytmPlayerRef = useRef<YTMPlayer | null>(null)
   const radioPlayerRef = useRef<RadioPlayer | null>(null)
   const subsonicPlayerRef = useRef<SubsonicPlayer | null>(null)
+  const jellyfinPlayerRef = useRef<JellyfinPlayer | null>(null)
   const activePlayerRef = useRef<IPlayerProvider | null>(null)
 
   const [tracks, setTracks] = useState<Track[]>([])
@@ -90,6 +92,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     ytmPlayerRef.current?.pause()
     radioPlayerRef.current?.pause()
     subsonicPlayerRef.current?.pause()
+    jellyfinPlayerRef.current?.pause()
 
     setPlayer({ source: 'local' })
     
@@ -111,6 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     ytmPlayerRef.current?.pause()
     localPlayerRef.current?.pause()
     subsonicPlayerRef.current?.pause()
+    jellyfinPlayerRef.current?.pause()
 
     setPlayer({ source: 'radio' })
     
@@ -127,10 +131,28 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     ytmPlayerRef.current?.pause()
     localPlayerRef.current?.pause()
     radioPlayerRef.current?.pause()
+    jellyfinPlayerRef.current?.pause()
 
     setPlayer({ source: 'subsonic' })
 
     await subsonicPlayerRef.current?.play(id, info)
+  }, [setPlayer])
+
+  const playJellyfin = useCallback(async (id: string, info: { title: string, artist: string, duration?: number, artwork?: string }) => {
+    // Switch orchestrator to Jellyfin
+    activePlayerRef.current = jellyfinPlayerRef.current
+    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
+
+    // Pause other players
+    yukinon.ytm.setLock?.(true)
+    ytmPlayerRef.current?.pause()
+    localPlayerRef.current?.pause()
+    radioPlayerRef.current?.pause()
+    subsonicPlayerRef.current?.pause()
+
+    setPlayer({ source: 'jellyfin' })
+
+    await jellyfinPlayerRef.current?.play(id, info)
   }, [setPlayer])
 
   const playNextRef = useRef<() => void>()
@@ -186,8 +208,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       return
     }
 
-    if (activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current) {
-      return // Radio and currently Subsonic cannot seek/skip via queue yet
+    if (activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current || activePlayerRef.current === jellyfinPlayerRef.current) {
+      return // Radio and currently Subsonic/Jellyfin cannot seek/skip via queue yet
     }
 
     if (activePlayerRef.current === localPlayerRef.current && queue.length > 0) {
@@ -205,7 +227,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
           yukinon.ytm.setLock?.(false) // Release lock so user can interact with YTM freely
         }
       } else {
-        if (activePlayerRef.current === localPlayerRef.current || activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current) {
+        if (activePlayerRef.current === localPlayerRef.current || activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current || activePlayerRef.current === jellyfinPlayerRef.current) {
           yukinon.ytm.setLock?.(true)
           ytmPlayerRef.current?.pause()
         }
@@ -241,6 +263,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     ytmPlayerRef.current = new YTMPlayer()
     radioPlayerRef.current = new RadioPlayer()
     subsonicPlayerRef.current = new SubsonicPlayer()
+    jellyfinPlayerRef.current = new JellyfinPlayer()
     activePlayerRef.current = localPlayerRef.current
 
     // Subscribe to LocalPlayer
@@ -277,6 +300,16 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     // Subscribe to SubsonicPlayer
     const unsubSubsonic = subsonicPlayerRef.current.onStateChange((state) => {
       if (activePlayerRef.current === subsonicPlayerRef.current) {
+        setPlayer(state)
+        if (state.status === 'stopped') {
+          playNextRef.current?.()
+        }
+      }
+    })
+
+    // Subscribe to JellyfinPlayer
+    const unsubJellyfin = jellyfinPlayerRef.current.onStateChange((state) => {
+      if (activePlayerRef.current === jellyfinPlayerRef.current) {
         setPlayer(state)
         if (state.status === 'stopped') {
           playNextRef.current?.()
@@ -321,10 +354,12 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       unsubYTM()
       unsubRadio()
       unsubSubsonic()
+      unsubJellyfin()
       localPlayerRef.current?.destroy()
       ytmPlayerRef.current?.destroy()
       radioPlayerRef.current?.destroy()
       subsonicPlayerRef.current?.destroy()
+      jellyfinPlayerRef.current?.destroy()
       unsubEq()
       unsubTheme()
       unsubPlay()
@@ -362,7 +397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       value={{
         tracks, setTracks,
         player, setPlayer,
-        playTrack, playRadio, playSubsonic, togglePlayPause, playNext, playPrev, seekTo, setVolume,
+        playTrack, playRadio, playSubsonic, playJellyfin, togglePlayPause, playNext, playPrev, seekTo, setVolume,
         queue,
         setQueue,
         currentQueueIndex,

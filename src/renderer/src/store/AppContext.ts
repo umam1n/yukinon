@@ -12,6 +12,7 @@ export interface AppStore {
   playTrack: (track: Track) => Promise<void>
   playRadio: (url: string, info: { title: string, station: string, artwork?: string }) => Promise<void>
   playSubsonic: (id: string, info: { title: string, artist: string, duration?: number, artwork?: string }) => Promise<void>
+  playJellyfin: (id: string, info: { title: string, artist: string, duration?: number, artwork?: string }) => Promise<void>
   togglePlayPause: () => void
   playNext: () => void
   playPrev: () => void
@@ -39,7 +40,7 @@ export interface AppStore {
   setTheme: (theme: Partial<AppTheme>) => void
 
   // Active view
-  activeView: 'library' | 'ytm' | 'radio' | 'subsonic' | 'eq' | 'presets' | 'settings' | 'playlists' | 'queue' | 'fullscreen'
+  activeView: 'library' | 'ytm' | 'radio' | 'subsonic' | 'jellyfin' | 'eq' | 'presets' | 'settings' | 'playlists' | 'queue' | 'fullscreen'
   setActiveView: (view: AppStore['activeView']) => void
 }
 

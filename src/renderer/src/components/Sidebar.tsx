@@ -9,7 +9,8 @@ import {
   ListMusic,
   List,
   Radio,
-  Cloud
+  Cloud,
+  Server
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
 import type { AppStore } from '../store/AppContext'
@@ -27,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'ytm', icon: <Youtube size={20} />, label: 'YouTube Music' },
   { id: 'radio', icon: <Radio size={20} />, label: 'Internet Radio' },
   { id: 'subsonic', icon: <Cloud size={20} />, label: 'Navidrome' },
+  { id: 'jellyfin', icon: <Server size={20} />, label: 'Jellyfin' },
   { id: 'eq', icon: <Sliders size={20} />, label: 'Equalizer' },
   { id: 'presets', icon: <Star size={20} />, label: 'Presets' },
   { id: 'settings', icon: <Settings size={20} />, label: 'Settings' }

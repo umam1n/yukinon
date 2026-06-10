@@ -11,6 +11,7 @@ import PlaylistsView from './components/Playlists/PlaylistsView'
 import QueueView from './components/Queue/QueueView'
 import RadioView from './components/Radio/RadioView'
 import SubsonicView from './components/Subsonic/SubsonicView'
+import JellyfinView from './components/Jellyfin/JellyfinView'
 import { useApp } from './store/AppContext'
 
 import FullscreenPlayer from './components/FullscreenPlayer'
@@ -40,6 +41,7 @@ function AppInner(): React.ReactElement {
           {activeView === 'queue' && <QueueView />}
           {activeView === 'radio' && <RadioView />}
           {activeView === 'subsonic' && <SubsonicView />}
+          {activeView === 'jellyfin' && <JellyfinView />}
           {activeView === 'ytm' && <YTMPlaceholder />}
           {activeView === 'eq' && <EQPanel />}
           {activeView === 'presets' && <PresetsView />}
