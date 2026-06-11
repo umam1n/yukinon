@@ -37,16 +37,17 @@ export class RadioPlayer implements IPlayerProvider {
     return () => this.listeners.delete(callback)
   }
 
-  async play(url?: string, stationInfo?: { title: string, station: string, artwork?: string }): Promise<void> {
+  async play(track?: Track): Promise<void> {
     if (!this.audioEl) return
 
-    if (url) {
+    if (track) {
       // audioEngine.connectLocalAudio(this.audioEl) // Bypass Web Audio API EQ for radio due to CORS
-      this.audioEl.src = url
+      this.audioEl.src = track.streamUrl!
       this.emit({
         status: 'playing',
-        radioInfo: stationInfo ? { title: stationInfo.title, station: stationInfo.station } : undefined,
-        artwork: stationInfo?.artwork || null
+        currentTrackId: track.id,
+        radioInfo: { title: track.title, station: track.artist },
+        artwork: track.artwork || null
       })
     }
     

@@ -38,7 +38,7 @@ const STATIONS = [
 ]
 
 export default function RadioView(): React.ReactElement {
-  const { playRadio, player } = useApp()
+  const { play, player } = useApp()
 
   return (
     <div style={{ padding: 32, height: '100%', overflowY: 'auto' }}>
@@ -69,7 +69,7 @@ export default function RadioView(): React.ReactElement {
           return (
             <div
               key={station.id}
-              onClick={() => playRadio(station.url, { title: station.title, station: station.name, artwork: station.artwork })}
+              onClick={() => play({ id: station.id, source: 'radio', streamUrl: station.url, title: station.title, artist: station.name, artwork: station.artwork })}
               style={{
                 background: 'rgba(255,255,255,0.03)',
                 borderRadius: 16,

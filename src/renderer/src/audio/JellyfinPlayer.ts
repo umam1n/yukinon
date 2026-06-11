@@ -1,5 +1,5 @@
 import { audioEngine } from './AudioEngine'
-import type { PlayerState } from '../../../../shared/types'
+import type { Track, PlayerState } from '../../../../shared/types'
 import type { IPlayerProvider } from './IPlayerProvider'
 import { getStreamUrl } from '../lib/jellyfin'
 
@@ -48,21 +48,21 @@ export class JellyfinPlayer implements IPlayerProvider {
     return () => this.listeners.delete(callback)
   }
 
-  async play(jellyfinTrackId?: string, info?: { title: string, artist: string, duration?: number, artwork?: string }): Promise<void> {
+  async play(track?: Track): Promise<void> {
     if (!this.audioEl) return
 
-    if (jellyfinTrackId) {
+    if (track) {
       try {
-        const streamUrl = await getStreamUrl(jellyfinTrackId)
+        const streamUrl = await getStreamUrl(track.id)
         audioEngine.connectLocalAudio(this.audioEl)
         this.audioEl.src = streamUrl
         
         this.emit({
           status: 'playing',
-          currentTrackId: jellyfinTrackId,
-          duration: info?.duration || 0,
-          jellyfinInfo: info ? { title: info.title, artist: info.artist } : undefined,
-          artwork: info?.artwork || null
+          currentTrackId: track.id,
+          duration: track.duration || 0,
+          jellyfinInfo: { title: track.title, artist: track.artist },
+          artwork: track.artwork || null
         })
       } catch (err) {
         console.error('[JellyfinPlayer] Failed to get stream URL:', err)

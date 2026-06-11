@@ -10,7 +10,8 @@ import {
   List,
   Radio,
   Cloud,
-  Server
+  Server,
+  ChevronLeft
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
 import type { AppStore } from '../store/AppContext'
@@ -35,7 +36,15 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 export default function Sidebar(): React.ReactElement {
-  const { activeView, setActiveView } = useApp()
+  const { activeView, setActiveView, activeModules } = useApp()
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.id === 'ytm' && !activeModules.ytm) return false
+    if (item.id === 'radio' && !activeModules.radio) return false
+    if (item.id === 'subsonic' && !activeModules.subsonic) return false
+    if (item.id === 'jellyfin' && !activeModules.jellyfin) return false
+    return true
+  })
 
   return (
     <aside
@@ -52,7 +61,7 @@ export default function Sidebar(): React.ReactElement {
         gap: 4
       }}
     >
-      {NAV_ITEMS.map((item) => {
+      {visibleItems.map((item) => {
         const isActive = activeView === item.id
         return (
           <button
@@ -111,6 +120,41 @@ export default function Sidebar(): React.ReactElement {
           </button>
         )
       })}
+
+      {activeView === 'ytm' && (
+        <button
+          onClick={() => window.yukinon.ytm.goBack?.()}
+          title="Go Back"
+          style={{
+            marginTop: 'auto',
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-dim)',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(var(--color-accent-rgb), 0.07)'
+            ;(e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+            ;(e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'
+          }}
+        >
+          <ChevronLeft size={24} />
+          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            BACK
+          </span>
+        </button>
+      )}
     </aside>
   )
 }

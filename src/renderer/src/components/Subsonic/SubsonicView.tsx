@@ -4,7 +4,7 @@ import { Cloud, Server, Lock, User, Play, Loader2 } from 'lucide-react'
 import { getSubsonicConfig, setSubsonicConfig, getAlbumList2, getCoverArtUrl, type SubsonicConfig } from '../../lib/subsonic'
 
 export default function SubsonicView(): React.ReactElement {
-  const { playSubsonic } = useApp()
+  const { play, setQueue } = useApp()
   const [config, setConfig] = useState<SubsonicConfig | null>(getSubsonicConfig())
   const [isConfiguring, setIsConfiguring] = useState(!config)
 
@@ -110,18 +110,22 @@ export default function SubsonicView(): React.ReactElement {
     try {
       const { subsonicFetch } = await import('../../lib/subsonic')
       const res = await subsonicFetch('getAlbum', { id: album.id })
-      const tracks = res.album.song
+      const songs = res.album.song
       
-      if (tracks && tracks.length > 0) {
-        const firstTrack = tracks[0]
-        const artwork = await getCoverArtUrl(firstTrack.coverArt || album.coverArt)
-        // For simplicity, just play the first track. A full implementation would set the Queue.
-        playSubsonic(firstTrack.id, {
-          title: firstTrack.title,
-          artist: firstTrack.artist,
-          duration: firstTrack.duration,
-          artwork
-        })
+      if (songs && songs.length > 0) {
+        const mappedTracks = await Promise.all(songs.map(async (song: any) => {
+          const artwork = await getCoverArtUrl(song.coverArt || album.coverArt || '')
+          return {
+            id: song.id,
+            source: 'subsonic' as const,
+            title: song.title,
+            artist: song.artist,
+            album: song.album || album.title || album.name,
+            duration: song.duration,
+            artwork
+          }
+        }))
+        setQueue(mappedTracks, 0)
       }
     } catch (err) {
       console.error('Failed to play album:', err)

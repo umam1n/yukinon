@@ -1,17 +1,21 @@
 // Shared types used by both main and renderer processes
 
+export type TrackSource = 'local' | 'ytm' | 'radio' | 'subsonic' | 'jellyfin'
+
 export interface Track {
   id: string
-  path: string
+  source: TrackSource
+  path?: string // Optional for remote sources
+  streamUrl?: string // Optional for local sources
   title: string
   artist: string
-  album: string
+  album?: string
   albumArtist?: string
   year?: number
   genre?: string
-  duration: number // seconds
-  artwork?: string // base64 data URL
-  format: string // e.g. "flac", "mp3", "wav"
+  duration?: number // seconds, optional for radio
+  artwork?: string // base64 data URL or remote URL
+  format?: string // e.g. "flac", "mp3", "wav"
   bitDepth?: number
   sampleRate?: number
   bitrate?: number

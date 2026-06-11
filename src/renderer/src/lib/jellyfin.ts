@@ -23,8 +23,24 @@ const jellyfin = new Jellyfin({
 
 let api: any = null
 
+export function sanitizeJellyfinUrl(url: string): string {
+  try {
+    let cleaned = url.trim()
+    if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+      cleaned = 'http://' + cleaned
+    }
+    const parsed = new URL(cleaned)
+    return parsed.origin
+  } catch (e) {
+    return url.trim()
+  }
+}
+
 export function setJellyfinConfig(c: JellyfinConfig) {
-  config = c
+  config = {
+    ...c,
+    url: sanitizeJellyfinUrl(c.url)
+  }
   if (config.url) {
     api = jellyfin.createApi(config.url)
     if (config.accessToken) {
@@ -120,3 +136,74 @@ export async function getStreamUrl(id: string): Promise<string> {
   const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
   return `${safeUrl}/Audio/${id}/universal?UserId=${config.userId}&DeviceId=yukinon-client-id&api_key=${config.accessToken}&Container=flac,mp3,aac,m4a,ogg,wav`
 }
+
+export async function getArtists() {
+  if (!config || !api) throw new Error('Jellyfin config not set')
+  const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
+  
+  const params = new URLSearchParams({
+    IncludeItemTypes: 'MusicArtist',
+    Recursive: 'true',
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    api_key: config.accessToken!
+  })
+  
+  const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
+  if (!res.ok) throw new Error('Failed to fetch artists')
+  return await res.json()
+}
+
+export async function getSongs() {
+  if (!config || !api) throw new Error('Jellyfin config not set')
+  const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
+  
+  const params = new URLSearchParams({
+    IncludeItemTypes: 'Audio',
+    Recursive: 'true',
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    api_key: config.accessToken!
+  })
+  
+  const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
+  if (!res.ok) throw new Error('Failed to fetch songs')
+  return await res.json()
+}
+
+export async function getPlaylists() {
+  if (!config || !api) throw new Error('Jellyfin config not set')
+  const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
+  
+  const params = new URLSearchParams({
+    IncludeItemTypes: 'Playlist',
+    Recursive: 'true',
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    api_key: config.accessToken!
+  })
+  
+  const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
+  if (!res.ok) throw new Error('Failed to fetch playlists')
+  return await res.json()
+}
+
+export async function getArtistTracks(artistId: string) {
+  if (!config || !api) throw new Error('Jellyfin config not set')
+  const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
+  
+  const params = new URLSearchParams({
+    IncludeItemTypes: 'Audio',
+    ArtistIds: artistId,
+    Recursive: 'true',
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    api_key: config.accessToken!
+  })
+  
+  const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
+  if (!res.ok) throw new Error('Failed to fetch artist tracks')
+  return await res.json()
+}
+
+

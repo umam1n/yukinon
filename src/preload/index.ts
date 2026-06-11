@@ -57,6 +57,7 @@ const api = {
   // YouTube Music
   ytm: {
     navigate: (url: string) => ipcRenderer.invoke('ytm:navigate', url),
+    goBack: () => ipcRenderer.invoke('ytm:goBack'),
     show: () => ipcRenderer.invoke('ytm:show'),
     hide: () => ipcRenderer.invoke('ytm:hide'),
     playPause: () => ipcRenderer.invoke('ytm:playPause'),

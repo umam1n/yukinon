@@ -160,6 +160,13 @@ export function registerYTMHandlers(
     }
   })
 
+  // Go Back
+  ipc.handle('ytm:goBack', () => {
+    if (ytmView && ytmView.webContents.canGoBack()) {
+      ytmView.webContents.goBack()
+    }
+  })
+
   // Execute JS in YTM context (play/pause/skip)
   ipc.handle('ytm:playPause', async () => {
     if (!ytmView) return

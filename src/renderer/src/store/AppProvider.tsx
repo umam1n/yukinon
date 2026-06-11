@@ -39,6 +39,15 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [activeView, setActiveView] = useState<AppStore['activeView']>('library')
   const [playbackMode, setPlaybackMode] = useState<'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'>('normal')
   const [isSmartPlay, setIsSmartPlay] = useState(false)
+  const [activeModules, setActiveModulesState] = useState({ ytm: false, radio: false, subsonic: false, jellyfin: false })
+
+  const setActiveModules = useCallback((updates: Partial<{ ytm: boolean; radio: boolean; subsonic: boolean; jellyfin: boolean }>) => {
+    setActiveModulesState((prev) => {
+      const next = { ...prev, ...updates }
+      window.yukinon.settings.set('active_modules', next)
+      return next
+    })
+  }, [])
   
   const [player, setPlayerState] = useState<PlayerState>({
     source: 'local',
@@ -82,77 +91,37 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     [theme, applyThemeToDOM]
   )
 
-  const playTrack = useCallback(async (track: Track) => {
-    // Switch orchestrator to Local
-    activePlayerRef.current = localPlayerRef.current
-    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
-
-    // Pause other players
-    yukinon.ytm.setLock?.(true)
-    ytmPlayerRef.current?.pause()
-    radioPlayerRef.current?.pause()
-    subsonicPlayerRef.current?.pause()
-    jellyfinPlayerRef.current?.pause()
-
-    setPlayer({ source: 'local' })
-    
-    await localPlayerRef.current?.play(track)
-    
-    // Fetch artwork asynchronously
-    yukinon.library.getTrackArtwork(track.id).then((artwork) => {
-      setPlayer({ artwork })
-    })
-  }, [setPlayer])
-
-  const playRadio = useCallback(async (url: string, info: { title: string, station: string, artwork?: string }) => {
-    // Switch orchestrator to Radio
-    activePlayerRef.current = radioPlayerRef.current
-    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
-    
-    // Pause other players
-    yukinon.ytm.setLock?.(true)
-    ytmPlayerRef.current?.pause()
-    localPlayerRef.current?.pause()
-    subsonicPlayerRef.current?.pause()
-    jellyfinPlayerRef.current?.pause()
-
-    setPlayer({ source: 'radio' })
-    
-    radioPlayerRef.current?.play(url, info)
-  }, [setPlayer])
-
-  const playSubsonic = useCallback(async (id: string, info: { title: string, artist: string, duration?: number, artwork?: string }) => {
-    // Switch orchestrator to Subsonic
-    activePlayerRef.current = subsonicPlayerRef.current
-    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
-
-    // Pause other players
-    yukinon.ytm.setLock?.(true)
-    ytmPlayerRef.current?.pause()
-    localPlayerRef.current?.pause()
-    radioPlayerRef.current?.pause()
-    jellyfinPlayerRef.current?.pause()
-
-    setPlayer({ source: 'subsonic' })
-
-    await subsonicPlayerRef.current?.play(id, info)
-  }, [setPlayer])
-
-  const playJellyfin = useCallback(async (id: string, info: { title: string, artist: string, duration?: number, artwork?: string }) => {
-    // Switch orchestrator to Jellyfin
-    activePlayerRef.current = jellyfinPlayerRef.current
-    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
-
-    // Pause other players
+  const play = useCallback(async (track: Track) => {
+    // Pause YTM and all other players implicitly by setting lock
     yukinon.ytm.setLock?.(true)
     ytmPlayerRef.current?.pause()
     localPlayerRef.current?.pause()
     radioPlayerRef.current?.pause()
     subsonicPlayerRef.current?.pause()
+    jellyfinPlayerRef.current?.pause()
 
-    setPlayer({ source: 'jellyfin' })
+    if (track.source === 'local') {
+      activePlayerRef.current = localPlayerRef.current
+      setPlayer({ source: 'local' })
+      await localPlayerRef.current?.play(track)
+      yukinon.library.getTrackArtwork(track.id).then((artwork) => {
+        setPlayer({ artwork })
+      })
+    } else if (track.source === 'radio') {
+      activePlayerRef.current = radioPlayerRef.current
+      setPlayer({ source: 'radio' })
+      radioPlayerRef.current?.play(track.streamUrl!, { title: track.title, station: track.artist, artwork: track.artwork })
+    } else if (track.source === 'subsonic') {
+      activePlayerRef.current = subsonicPlayerRef.current
+      setPlayer({ source: 'subsonic' })
+      await subsonicPlayerRef.current?.play(track.id, { title: track.title, artist: track.artist, duration: track.duration, artwork: track.artwork })
+    } else if (track.source === 'jellyfin') {
+      activePlayerRef.current = jellyfinPlayerRef.current
+      setPlayer({ source: 'jellyfin' })
+      await jellyfinPlayerRef.current?.play(track.id, { title: track.title, artist: track.artist, duration: track.duration, artwork: track.artwork })
+    }
 
-    await jellyfinPlayerRef.current?.play(id, info)
+    activePlayerRef.current?.setVolume(playerStateRef.current.volume)
   }, [setPlayer])
 
   const playNextRef = useRef<() => void>()
@@ -162,7 +131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       return
     }
 
-    if (activePlayerRef.current === localPlayerRef.current && queue.length > 0) {
+    if (queue.length > 0) {
       let nextIndex = currentQueueIndex
 
       if (playbackMode === 'repeat-one') {
@@ -195,9 +164,9 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       }
 
       setCurrentQueueIndex(nextIndex)
-      playTrack(queue[nextIndex])
+      play(queue[nextIndex])
     }
-  }, [queue, currentQueueIndex, playbackMode, isSmartPlay, playTrack, setPlayer])
+  }, [queue, currentQueueIndex, playbackMode, isSmartPlay, play, setPlayer])
   
   // Keep ref up to date
   useEffect(() => { playNextRef.current = playNext }, [playNext])
@@ -208,16 +177,12 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       return
     }
 
-    if (activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current || activePlayerRef.current === jellyfinPlayerRef.current) {
-      return // Radio and currently Subsonic/Jellyfin cannot seek/skip via queue yet
-    }
-
-    if (activePlayerRef.current === localPlayerRef.current && queue.length > 0) {
+    if (queue.length > 0) {
       const prevIndex = (currentQueueIndex - 1 + queue.length) % queue.length
       setCurrentQueueIndex(prevIndex)
-      playTrack(queue[prevIndex])
+      play(queue[prevIndex])
     }
-  }, [queue, currentQueueIndex, playTrack])
+  }, [queue, currentQueueIndex, play])
 
   const togglePlayPause = useCallback(() => {
     if (activePlayerRef.current) {
@@ -251,10 +216,17 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       setQueueState(newQueue)
       setCurrentQueueIndex(startIndex)
       if (newQueue.length > 0) {
-        playTrack(newQueue[startIndex])
+        play(newQueue[startIndex])
       }
     },
-    [playTrack]
+    [play]
+  )
+
+  const addToQueue = useCallback(
+    (track: Track) => {
+      setQueueState((prev) => [...prev, track])
+    },
+    []
   )
 
   // Initialize Players and Global Listeners
@@ -321,6 +293,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     yukinon.theme.get().then((t: AppTheme) => {
       setThemeState(t)
       applyThemeToDOM(t)
+    })
+
+    yukinon.settings.get('active_modules').then((m: any) => {
+      if (m) setActiveModulesState(m)
     })
 
     yukinon.library.getTracks().then(setTracks)
@@ -397,9 +373,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       value={{
         tracks, setTracks,
         player, setPlayer,
-        playTrack, playRadio, playSubsonic, playJellyfin, togglePlayPause, playNext, playPrev, seekTo, setVolume,
+        play, togglePlayPause, playNext, playPrev, seekTo, setVolume,
         queue,
         setQueue,
+        addToQueue,
         currentQueueIndex,
         playbackMode,
         togglePlaybackMode: () => {
@@ -423,7 +400,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         eqBands, setEqBand, applyEqPreset,
         eqPresets, activePresetId, setActivePresetId, saveEqPreset,
         theme, setTheme,
-        activeView, setActiveView
+        activeView, setActiveView,
+        activeModules, setActiveModules
       }}
     >
       {children}

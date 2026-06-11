@@ -57,6 +57,7 @@ async function indexTrack(filePath: string): Promise<Track | null> {
 
     const track: Track = {
       id,
+      source: 'local',
       path: filePath,
       title: common.title || filePath.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Unknown',
       artist: common.artist || 'Unknown Artist',
@@ -130,7 +131,7 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
   // Get all tracks (excluding artwork to prevent IPC/memory freeze)
   ipc.handle('library:getTracks', () => {
     const rows = db.prepare(`
-      SELECT id, path, title, artist, album, album_artist as albumArtist, year, genre,
+      SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
              duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, play_count as playCount, is_favorite as isFavorite
       FROM tracks
       ORDER BY artist, album, title
@@ -141,7 +142,7 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
   // Get single track (excluding artwork)
   ipc.handle('library:getTrack', (_, id: string) => {
     const row = db.prepare(`
-      SELECT id, path, title, artist, album, album_artist as albumArtist, year, genre,
+      SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
              duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, play_count as playCount, is_favorite as isFavorite
       FROM tracks WHERE id = ?
     `).get(id)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Moon, Sun, Palette, FolderOpen, Trash2, Info, RefreshCw, Copy, ShieldCheck } from 'lucide-react'
+import { Moon, Sun, Palette, FolderOpen, Trash2, Info, RefreshCw, Copy, ShieldCheck, Blocks } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 
 const ACCENT_PRESETS = [
@@ -14,7 +14,7 @@ const ACCENT_PRESETS = [
 ]
 
 export default function SettingsView(): React.ReactElement {
-  const { theme, setTheme, setTracks } = useApp()
+  const { theme, setTheme, setTracks, activeModules, setActiveModules, activeView, setActiveView } = useApp()
   const [folders, setFolders] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -237,6 +237,34 @@ export default function SettingsView(): React.ReactElement {
           </SettingRow>
         </Section>
 
+        {/* Integrations */}
+        <Section title="Integrations & Modules" icon={<Blocks size={16} />}>
+          <SettingRow label="YouTube Music" description="Enable the embedded YouTube Music player">
+            <Toggle checked={activeModules.ytm} onChange={() => {
+              setActiveModules({ ytm: !activeModules.ytm })
+              if (activeView === 'ytm' && activeModules.ytm) setActiveView('library')
+            }} />
+          </SettingRow>
+          <SettingRow label="Internet Radio" description="Stream worldwide radio stations">
+            <Toggle checked={activeModules.radio} onChange={() => {
+              setActiveModules({ radio: !activeModules.radio })
+              if (activeView === 'radio' && activeModules.radio) setActiveView('library')
+            }} />
+          </SettingRow>
+          <SettingRow label="Navidrome / Subsonic" description="Connect to your personal Subsonic API server">
+            <Toggle checked={activeModules.subsonic} onChange={() => {
+              setActiveModules({ subsonic: !activeModules.subsonic })
+              if (activeView === 'subsonic' && activeModules.subsonic) setActiveView('library')
+            }} />
+          </SettingRow>
+          <SettingRow label="Jellyfin" description="Connect to your Jellyfin media server">
+            <Toggle checked={activeModules.jellyfin} onChange={() => {
+              setActiveModules({ jellyfin: !activeModules.jellyfin })
+              if (activeView === 'jellyfin' && activeModules.jellyfin) setActiveView('library')
+            }} />
+          </SettingRow>
+        </Section>
+
         {/* Music Folders */}
         <Section title="Music Library" icon={<FolderOpen size={16} />}>
           <div style={{ padding: '0 16px 16px 16px' }}>
@@ -437,6 +465,38 @@ function ModeBtn({ active, onClick, icon, label }: { active: boolean; onClick: (
     >
       {icon}
       {label}
+    </button>
+  )
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }): React.ReactElement {
+  return (
+    <button
+      onClick={onChange}
+      style={{
+        width: 44,
+        height: 24,
+        borderRadius: 24,
+        background: checked ? 'var(--color-accent)' : 'var(--bg-3)',
+        border: '1px solid var(--border)',
+        position: 'relative',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        flexShrink: 0
+      }}
+    >
+      <div
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: '50%',
+          background: checked ? '#000' : 'var(--text-dim)',
+          position: 'absolute',
+          top: 3,
+          left: checked ? 23 : 3,
+          transition: 'all 0.2s'
+        }}
+      />
     </button>
   )
 }

@@ -1,10 +1,21 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../store/AppContext'
-import { Cloud, Server, Lock, User, Play, Loader2 } from 'lucide-react'
-import { getJellyfinConfig, setJellyfinConfig, getAlbums, getAlbumTracks, getCoverArtUrl, type JellyfinConfig } from '../../lib/jellyfin'
+import { Cloud, Server, Lock, User, Play, Loader2, Disc, Users, Music, ListMusic } from 'lucide-react'
+import {
+  getJellyfinConfig,
+  setJellyfinConfig,
+  getAlbums,
+  getAlbumTracks,
+  getCoverArtUrl,
+  getArtists,
+  getSongs,
+  getPlaylists,
+  type JellyfinConfig
+} from '../../lib/jellyfin'
+import type { Track } from '../../../../shared/types'
 
 export default function JellyfinView(): React.ReactElement {
-  const { playJellyfin } = useApp()
+  const { play, setQueue, addToQueue } = useApp()
   const [config, setConfig] = useState<JellyfinConfig | null>(getJellyfinConfig())
   const [isConfiguring, setIsConfiguring] = useState(!config)
 
@@ -16,7 +27,11 @@ export default function JellyfinView(): React.ReactElement {
   const [error, setError] = useState('')
 
   // Library states
+  const [activeTab, setActiveTab] = useState<'albums' | 'artists' | 'songs' | 'playlists'>('albums')
   const [albums, setAlbums] = useState<any[]>([])
+  const [artists, setArtists] = useState<any[]>([])
+  const [songs, setSongs] = useState<any[]>([])
+  const [playlists, setPlaylists] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
   // Load saved config on mount
@@ -32,28 +47,49 @@ export default function JellyfinView(): React.ReactElement {
     })
   }, [])
 
-  // Fetch albums when config is ready
+  // Fetch library when config or tab changes
   useEffect(() => {
     if (config && !isConfiguring && config.accessToken) {
-      loadLibrary()
+      loadTabContent(activeTab)
     }
-  }, [config, isConfiguring])
+  }, [config, isConfiguring, activeTab])
 
-  const loadLibrary = async () => {
+  const loadTabContent = async (tab: 'albums' | 'artists' | 'songs' | 'playlists') => {
     setIsLoading(true)
     setError('')
     try {
-      const res = await getAlbums()
-      if (res && res.Items) {
-        setAlbums(res.Items)
+      if (tab === 'albums') {
+        const res = await getAlbums()
+        if (res && res.Items) setAlbums(res.Items)
+      } else if (tab === 'artists') {
+        const res = await getArtists()
+        if (res && res.Items) setArtists(res.Items)
+      } else if (tab === 'songs') {
+        const res = await getSongs()
+        if (res && res.Items) setSongs(res.Items)
+      } else if (tab === 'playlists') {
+        const res = await getPlaylists()
+        if (res && res.Items) setPlaylists(res.Items)
       }
     } catch (err: any) {
-      setError('Failed to fetch library: ' + err.message)
-      if (err.message.includes('401')) {
+      setError(`Failed to fetch ${tab}: ` + err.message)
+      if (err.message?.includes('401') || err.message?.includes('AuthenticateByName')) {
         setIsConfiguring(true)
       }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const mapJellyfinTrack = (item: any): Track => {
+    return {
+      id: item.Id,
+      source: 'jellyfin',
+      title: item.Name,
+      artist: item.Artists?.[0] || item.AlbumArtist || 'Unknown Artist',
+      album: item.Album || 'Unknown Album',
+      duration: item.RunTimeTicks ? Math.floor(item.RunTimeTicks / 10000000) : 0,
+      artwork: getCoverArtUrl(item.AlbumId || item.Id)
     }
   }
 
@@ -70,12 +106,11 @@ export default function JellyfinView(): React.ReactElement {
     const newConfig: JellyfinConfig = {
       url: formattedUrl.endsWith('/') ? formattedUrl.slice(0, -1) : formattedUrl,
       username,
-      password,
+      password
     }
 
     try {
       setJellyfinConfig(newConfig)
-      // Ping / login to verify
       const { login } = await import('../../lib/jellyfin')
       await login()
 
@@ -86,15 +121,15 @@ export default function JellyfinView(): React.ReactElement {
         accessToken: currentConfig.accessToken,
         userId: currentConfig.userId
       }
-      
+
       await window.yukinon.settings.set('jellyfin_config', safeConfig)
       setConfig(safeConfig)
       setIsConfiguring(false)
-      setPassword('') // Clear from memory
-      loadLibrary()
+      setPassword('') // Clear password
+      loadTabContent(activeTab)
     } catch (err: any) {
       setError(err.message || 'Connection failed. Please check your credentials.')
-      if (config) setJellyfinConfig(config) // revert
+      if (config) setJellyfinConfig(config) // Revert
     } finally {
       setIsSaving(false)
     }
@@ -104,22 +139,54 @@ export default function JellyfinView(): React.ReactElement {
     try {
       const { getAlbumTracks } = await import('../../lib/jellyfin')
       const res = await getAlbumTracks(album.Id)
-      const tracks = res.Items
-      
-      if (tracks && tracks.length > 0) {
-        const firstTrack = tracks[0]
-        const artwork = getCoverArtUrl(album.Id)
-        // For simplicity, just play the first track.
-        playJellyfin(firstTrack.Id, {
-          title: firstTrack.Name,
-          artist: firstTrack.Artists?.[0] || album.AlbumArtist || 'Unknown Artist',
-          duration: firstTrack.RunTimeTicks ? firstTrack.RunTimeTicks / 10000000 : 0,
-          artwork
-        })
+      const items = res.Items
+
+      if (items && items.length > 0) {
+        const mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        setQueue(mappedTracks, 0)
       }
     } catch (err) {
       console.error('Failed to play album:', err)
     }
+  }
+
+  const handlePlayArtist = async (artist: any) => {
+    try {
+      const { getArtistTracks } = await import('../../lib/jellyfin')
+      const res = await getArtistTracks(artist.Id)
+      const items = res.Items
+
+      if (items && items.length > 0) {
+        const mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        setQueue(mappedTracks, 0)
+      }
+    } catch (err) {
+      console.error('Failed to play artist tracks:', err)
+    }
+  }
+
+  const handlePlayPlaylist = async (playlist: any) => {
+    try {
+      const { getAlbumTracks } = await import('../../lib/jellyfin')
+      const res = await getAlbumTracks(playlist.Id)
+      const items = res.Items
+
+      if (items && items.length > 0) {
+        const mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        setQueue(mappedTracks, 0)
+      }
+    } catch (err) {
+      console.error('Failed to play playlist tracks:', err)
+    }
+  }
+
+  const handlePlaySong = (song: any, index: number) => {
+    const mappedTracks = songs.map((item: any) => mapJellyfinTrack(item))
+    setQueue(mappedTracks, index)
+  }
+
+  const handleAddToQueue = (song: any) => {
+    addToQueue(mapJellyfinTrack(song))
   }
 
   if (isConfiguring) {
@@ -205,13 +272,13 @@ export default function JellyfinView(): React.ReactElement {
               {isSaving ? <Loader2 size={20} className="animate-spin" /> : 'Connect'}
             </button>
             {config && config.accessToken && (
-               <button
-               type="button"
-               onClick={() => setIsConfiguring(false)}
-               style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', fontSize: 14 }}
-             >
-               Cancel
-             </button>
+              <button
+                type="button"
+                onClick={() => setIsConfiguring(false)}
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', fontSize: 14 }}
+              >
+                Cancel
+              </button>
             )}
           </form>
         </div>
@@ -220,7 +287,8 @@ export default function JellyfinView(): React.ReactElement {
   }
 
   return (
-    <div style={{ padding: 32, height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: 32, height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--color-accent)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -241,61 +309,289 @@ export default function JellyfinView(): React.ReactElement {
         </button>
       </div>
 
-      {error && <div style={{ color: '#ef4444', marginBottom: 24 }}>{error}</div>}
+      {error && <div style={{ color: '#ef4444', marginBottom: 24, background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 8 }}>{error}</div>}
 
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Albums</h2>
+      {/* Tabs Selector */}
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: 24, paddingBottom: 0 }}>
+        {(['albums', 'artists', 'songs', 'playlists'] as const).map((tab) => {
+          const isActive = activeTab === tab
+          const label = tab.charAt(0).toUpperCase() + tab.slice(1)
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: isActive ? 'var(--color-accent)' : 'var(--text-dim)',
+                padding: '12px 20px',
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: 'pointer',
+                borderBottom: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
+                marginBottom: -1,
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              {tab === 'albums' && <Disc size={16} />}
+              {tab === 'artists' && <Users size={16} />}
+              {tab === 'songs' && <Music size={16} />}
+              {tab === 'playlists' && <ListMusic size={16} />}
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Main Content */}
+      <div style={{ minHeight: 200 }}>
         {isLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)' }}>
-             <Loader2 size={20} className="animate-spin" /> Loading library...
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', padding: 20 }}>
+            <Loader2 size={20} className="animate-spin" /> Loading {activeTab}...
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 24
-          }}>
-            {albums.map((album, i) => {
-               const coverUrl = getCoverArtUrl(album.Id)
-               
-               return (
-                <div
-                  key={album.Id + i}
-                  onClick={() => handlePlayAlbum(album)}
-                  style={{
-                    background: 'rgba(255,255,255,0.02)',
-                    borderRadius: 12,
-                    padding: 12,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
-                    e.currentTarget.style.transform = 'none'
-                  }}
-                >
-                  <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.2)', position: 'relative' }}>
-                    {coverUrl ? <img src={coverUrl} alt={album.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center'}}><Cloud size={32}/></div>}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity">
-                      <div className="w-12 h-12 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg">
-                        <Play size={20} fill="currentColor" />
+          <>
+            {/* Albums Tab */}
+            {activeTab === 'albums' && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                gap: 24
+              }}>
+                {albums.map((album, i) => {
+                  const coverUrl = getCoverArtUrl(album.Id)
+                  return (
+                    <div
+                      key={album.Id + i}
+                      onClick={() => handlePlayAlbum(album)}
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        borderRadius: 12,
+                        padding: 12,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        position: 'relative'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                        e.currentTarget.style.transform = 'translateY(-4px)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                        e.currentTarget.style.transform = 'none'
+                      }}
+                    >
+                      <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.2)', position: 'relative' }}>
+                        {coverUrl ? <img src={coverUrl} alt={album.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Disc size={32} /></div>}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity">
+                          <div className="w-12 h-12 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg">
+                            <Play size={20} fill="currentColor" />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
+                        {album.Name}
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {album.AlbumArtist || album.Artists?.[0] || 'Unknown Artist'}
                       </div>
                     </div>
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
-                    {album.Name}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {album.AlbumArtist || album.Artists?.[0] || 'Unknown'}
-                  </div>
-                </div>
-               )
-            })}
-          </div>
+                  )
+                })}
+                {albums.length === 0 && <div style={{ color: 'var(--text-dim)', padding: 20 }}>No albums found.</div>}
+              </div>
+            )}
+
+            {/* Artists Tab */}
+            {activeTab === 'artists' && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                gap: 24
+              }}>
+                {artists.map((artist, i) => {
+                  const coverUrl = getCoverArtUrl(artist.Id, 180)
+                  return (
+                    <div
+                      key={artist.Id + i}
+                      onClick={() => handlePlayArtist(artist)}
+                      style={{
+                        background: 'transparent',
+                        borderRadius: 12,
+                        padding: 12,
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'none'
+                      }}
+                    >
+                      <div style={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        margin: '0 auto 12px auto',
+                        background: 'rgba(255,255,255,0.03)',
+                        boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
+                        border: '1px solid rgba(255,255,255,0.05)'
+                      }}>
+                        {coverUrl ? <img src={coverUrl} alt={artist.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={32} /></div>}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                        {artist.Name}
+                      </div>
+                    </div>
+                  )
+                })}
+                {artists.length === 0 && <div style={{ color: 'var(--text-dim)', padding: 20 }}>No artists found.</div>}
+              </div>
+            )}
+
+            {/* Songs Tab */}
+            {activeTab === 'songs' && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-dim)' }}>
+                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>#</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Title</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Artist</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Album</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {songs.map((song, idx) => {
+                      const track = mapJellyfinTrack(song)
+                      return (
+                        <tr
+                          key={song.Id + idx}
+                          style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.03)',
+                            transition: 'background 0.2s',
+                            cursor: 'default'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{idx + 1}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <img src={track.artwork} style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover', background: 'rgba(0,0,0,0.2)' }} />
+                              <div style={{ fontWeight: 600, color: 'var(--text)' }}>{track.title}</div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{track.artist}</td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{track.album}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                              <button
+                                onClick={() => handlePlaySong(song, idx)}
+                                style={{
+                                  background: 'var(--color-accent)',
+                                  color: 'black',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  padding: '6px 12px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                <Play size={12} fill="currentColor" /> Play
+                              </button>
+                              <button
+                                onClick={() => handleAddToQueue(song)}
+                                style={{
+                                  background: 'rgba(255,255,255,0.08)',
+                                  color: 'var(--text)',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  padding: '6px 12px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                + Queue
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {songs.length === 0 && <div style={{ color: 'var(--text-dim)', padding: 20, textAlign: 'center' }}>No songs found.</div>}
+              </div>
+            )}
+
+            {/* Playlists Tab */}
+            {activeTab === 'playlists' && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                gap: 24
+              }}>
+                {playlists.map((playlist, i) => {
+                  const coverUrl = getCoverArtUrl(playlist.Id)
+                  return (
+                    <div
+                      key={playlist.Id + i}
+                      onClick={() => handlePlayPlaylist(playlist)}
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        borderRadius: 12,
+                        padding: 12,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        position: 'relative'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                        e.currentTarget.style.transform = 'translateY(-4px)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                        e.currentTarget.style.transform = 'none'
+                      }}
+                    >
+                      <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.2)', position: 'relative' }}>
+                        {coverUrl ? <img src={coverUrl} alt={playlist.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ListMusic size={32} /></div>}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity">
+                          <div className="w-12 h-12 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg">
+                            <Play size={20} fill="currentColor" />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
+                        {playlist.Name}
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        Playlist
+                      </div>
+                    </div>
+                  )
+                })}
+                {playlists.length === 0 && <div style={{ color: 'var(--text-dim)', padding: 20 }}>No playlists found.</div>}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
