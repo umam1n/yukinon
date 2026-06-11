@@ -16,16 +16,20 @@ function formatTime(secs: number): string {
 export default function NowPlaying(): React.ReactElement {
   const { player, tracks, togglePlayPause, playNext, playPrev, seekTo, setVolume, playbackMode, togglePlaybackMode, isSmartPlay, toggleSmartPlay, setActiveView } = useApp()
   const [isMuted, setIsMuted] = useState(false)
+  const [dragPosition, setDragPosition] = useState<number | null>(null)
 
   const currentTrack = tracks.find((t) => t.id === player.currentTrackId)
 
-  const handleSeek = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const pos = Number(e.target.value)
-      seekTo(pos)
-    },
-    [seekTo]
-  )
+  const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setDragPosition(Number(e.target.value))
+  }, [])
+
+  const handleSeekEnd = useCallback(() => {
+    if (dragPosition !== null) {
+      seekTo(dragPosition)
+      setDragPosition(null)
+    }
+  }, [dragPosition, seekTo])
 
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
@@ -44,7 +48,7 @@ export default function NowPlaying(): React.ReactElement {
   }, [isMuted, setVolume])
 
   const progressPercent =
-    player.duration > 0 ? (player.position / player.duration) * 100 : 0
+    player.duration > 0 ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100 : 0
 
   return (
     <div
@@ -83,9 +87,11 @@ export default function NowPlaying(): React.ReactElement {
           className="progress-slider"
           min={0}
           max={player.duration || 0}
-          value={player.position}
+          value={dragPosition !== null ? dragPosition : player.position}
           step={0.5}
-          onChange={handleSeek}
+          onChange={handleSeekChange}
+          onMouseUp={handleSeekEnd}
+          onTouchEnd={handleSeekEnd}
           style={{
             position: 'absolute',
             top: 0,
@@ -161,6 +167,8 @@ export default function NowPlaying(): React.ReactElement {
               ? player.radioInfo?.title || 'Internet Radio'
               : player.source === 'subsonic'
               ? player.subsonicInfo?.title || 'Navidrome'
+              : player.source === 'jellyfin'
+              ? player.jellyfinInfo?.title || 'Jellyfin'
               : currentTrack?.title || 'Nothing playing'}
           </div>
           <div
@@ -178,6 +186,8 @@ export default function NowPlaying(): React.ReactElement {
               ? player.radioInfo?.station || ''
               : player.source === 'subsonic'
               ? player.subsonicInfo?.artist || ''
+              : player.source === 'jellyfin'
+              ? player.jellyfinInfo?.artist || ''
               : currentTrack?.artist || '—'}
           </div>
           {currentTrack && player.source === 'local' && (
@@ -248,7 +258,7 @@ export default function NowPlaying(): React.ReactElement {
 
         {/* Time */}
         <div style={{ fontSize: 11, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums', fontFamily: 'JetBrains Mono, monospace' }}>
-          {formatTime(player.position)} / {formatTime(player.duration)}
+          {formatTime(dragPosition !== null ? dragPosition : player.position)} / {formatTime(player.duration)}
         </div>
       </div>
 

@@ -47,7 +47,7 @@ export class LocalPlayer implements IPlayerProvider {
 
     if (track) {
       audioEngine.connectLocalAudio(this.audioEl)
-      this.audioEl.src = `yukinon://local/track?path=${encodeURIComponent(track.path)}`
+      this.audioEl.src = `yukinon://local/track?path=${encodeURIComponent(track.path!)}`
       this.emit({
         currentTrackId: track.id,
         duration: track.duration,

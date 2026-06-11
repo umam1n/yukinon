@@ -1,5 +1,5 @@
 import { audioEngine } from './AudioEngine'
-import type { PlayerState } from '../../../../shared/types'
+import type { Track, PlayerState } from '../../../../shared/types'
 import type { IPlayerProvider } from './IPlayerProvider'
 
 export class RadioPlayer implements IPlayerProvider {

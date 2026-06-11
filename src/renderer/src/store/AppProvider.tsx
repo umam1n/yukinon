@@ -110,15 +110,15 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     } else if (track.source === 'radio') {
       activePlayerRef.current = radioPlayerRef.current
       setPlayer({ source: 'radio' })
-      radioPlayerRef.current?.play(track.streamUrl!, { title: track.title, station: track.artist, artwork: track.artwork })
+      await radioPlayerRef.current?.play(track)
     } else if (track.source === 'subsonic') {
       activePlayerRef.current = subsonicPlayerRef.current
       setPlayer({ source: 'subsonic' })
-      await subsonicPlayerRef.current?.play(track.id, { title: track.title, artist: track.artist, duration: track.duration, artwork: track.artwork })
+      await subsonicPlayerRef.current?.play(track)
     } else if (track.source === 'jellyfin') {
       activePlayerRef.current = jellyfinPlayerRef.current
       setPlayer({ source: 'jellyfin' })
-      await jellyfinPlayerRef.current?.play(track.id, { title: track.title, artist: track.artist, duration: track.duration, artwork: track.artwork })
+      await jellyfinPlayerRef.current?.play(track)
     }
 
     activePlayerRef.current?.setVolume(playerStateRef.current.volume)

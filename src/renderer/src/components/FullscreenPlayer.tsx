@@ -14,19 +14,20 @@ function formatTime(secs: number): string {
 }
 
 export default function FullscreenPlayer(): React.ReactElement {
-  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, playbackMode, togglePlaybackMode, setActiveView, setVolume } = useApp()
+  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, playbackMode, togglePlaybackMode, setActiveView, setVolume, seekTo } = useApp()
   const [isMuted, setIsMuted] = useState(false)
   const [showLyrics, setShowLyrics] = useState(false)
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false)
   const [isPlainLyrics, setIsPlainLyrics] = useState(false)
+  const [dragPosition, setDragPosition] = useState<number | null>(null)
   
   const currentTrack = tracks.find((t) => t.id === player.currentTrackId)
   const lyricsContainerRef = React.useRef<HTMLDivElement>(null)
   const activeLyricRef = React.useRef<HTMLDivElement>(null)
 
-  const title = player.source === 'ytm' ? player.ytmInfo?.title || 'YouTube Music' : player.source === 'radio' ? player.radioInfo?.title || 'Internet Radio' : player.source === 'subsonic' ? player.subsonicInfo?.title || 'Navidrome' : currentTrack?.title || 'Nothing playing'
-  const artist = player.source === 'ytm' ? player.ytmInfo?.artist || '' : player.source === 'radio' ? player.radioInfo?.station || '' : player.source === 'subsonic' ? player.subsonicInfo?.artist || '' : currentTrack?.artist || '—'
+  const title = player.source === 'ytm' ? player.ytmInfo?.title || 'YouTube Music' : player.source === 'radio' ? player.radioInfo?.title || 'Internet Radio' : player.source === 'subsonic' ? player.subsonicInfo?.title || 'Navidrome' : player.source === 'jellyfin' ? player.jellyfinInfo?.title || 'Jellyfin' : currentTrack?.title || 'Nothing playing'
+  const artist = player.source === 'ytm' ? player.ytmInfo?.artist || '' : player.source === 'radio' ? player.radioInfo?.station || '' : player.source === 'subsonic' ? player.subsonicInfo?.artist || '' : player.source === 'jellyfin' ? player.jellyfinInfo?.artist || '' : currentTrack?.artist || '—'
   const artwork = player.artwork
 
   React.useEffect(() => {
@@ -59,20 +60,16 @@ export default function FullscreenPlayer(): React.ReactElement {
     }
   }, [player.position, showLyrics, isPlainLyrics])
 
-  const handleSeek = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const pos = Number(e.target.value)
-      setPlayer({ position: pos })
-      
-      if (player.source === 'local') {
-        const audioEl = document.querySelector('audio') as HTMLAudioElement | null
-        if (audioEl) audioEl.currentTime = pos
-      } else {
-        window.yukinon.ytm.seek?.(pos)
-      }
-    },
-    [setPlayer, player.source]
-  )
+  const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setDragPosition(Number(e.target.value))
+  }, [])
+
+  const handleSeekEnd = useCallback(() => {
+    if (dragPosition !== null) {
+      seekTo(dragPosition)
+      setDragPosition(null)
+    }
+  }, [dragPosition, seekTo])
 
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
@@ -90,7 +87,7 @@ export default function FullscreenPlayer(): React.ReactElement {
     }
   }, [isMuted, setVolume])
 
-  const progressPercent = player.duration > 0 ? (player.position / player.duration) * 100 : 0
+  const progressPercent = player.duration > 0 ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100 : 0
 
   // Calculate active lyric index
   let activeLyricIndex = -1
@@ -207,9 +204,11 @@ export default function FullscreenPlayer(): React.ReactElement {
                 type="range"
                 min={0}
                 max={player.duration || 0}
-                value={player.position}
+                value={dragPosition !== null ? dragPosition : player.position}
                 step={0.5}
-                onChange={handleSeek}
+                onChange={handleSeekChange}
+                onMouseUp={handleSeekEnd}
+                onTouchEnd={handleSeekEnd}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10 }}
               />
               <div style={{
@@ -222,7 +221,7 @@ export default function FullscreenPlayer(): React.ReactElement {
               }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
-              <span>{formatTime(player.position)}</span>
+              <span>{formatTime(dragPosition !== null ? dragPosition : player.position)}</span>
               <span>{formatTime(player.duration)}</span>
             </div>
           </div>

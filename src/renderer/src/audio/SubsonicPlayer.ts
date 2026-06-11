@@ -55,7 +55,7 @@ export class SubsonicPlayer implements IPlayerProvider {
       try {
         const streamUrl = await getStreamUrl(track.id)
         audioEngine.connectLocalAudio(this.audioEl)
-        this.audioEl.src = streamUrl
+        this.audioEl.src = `yukinon://stream?url=${encodeURIComponent(streamUrl)}`
         
         this.emit({
           status: 'playing',

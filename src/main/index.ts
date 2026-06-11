@@ -95,8 +95,15 @@ app.whenReady().then(async () => {
     try {
       const url = new URL(request.url)
       const filePath = url.searchParams.get('path')
-      if (!filePath) {
-        return new Response('Missing path parameter', { status: 400 })
+      const targetUrl = url.searchParams.get('url')
+
+      let fetchUrl = ''
+      if (filePath) {
+        fetchUrl = pathToFileURL(filePath).toString()
+      } else if (targetUrl) {
+        fetchUrl = targetUrl
+      } else {
+        return new Response('Missing path or url parameter', { status: 400 })
       }
 
       if (request.method === 'OPTIONS') {
@@ -110,13 +117,15 @@ app.whenReady().then(async () => {
         })
       }
 
-      const response = await net.fetch(pathToFileURL(filePath).toString(), {
+      const response = await net.fetch(fetchUrl, {
         method: request.method,
-        headers: request.headers
+        headers: request.headers,
+        bypassCustomProtocolHandlers: true // Prevent infinite loops
       })
 
       const responseHeaders = new Headers(response.headers)
       responseHeaders.set('Access-Control-Allow-Origin', '*')
+      responseHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type')
 
       return new Response(response.body, {
         status: response.status,

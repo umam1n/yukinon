@@ -134,7 +134,7 @@ export function getCoverArtUrl(id: string, size = 300): string {
 export async function getStreamUrl(id: string): Promise<string> {
   if (!config || !api) throw new Error('Jellyfin config not set')
   const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
-  return `${safeUrl}/Audio/${id}/universal?UserId=${config.userId}&DeviceId=yukinon-client-id&api_key=${config.accessToken}&Container=flac,mp3,aac,m4a,ogg,wav`
+  return `${safeUrl}/Items/${id}/Download?api_key=${config.accessToken}`
 }
 
 export async function getArtists() {
