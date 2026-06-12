@@ -7,15 +7,13 @@ import TrackList from './TrackList'
 type GroupMode = 'all' | 'album' | 'artist'
 
 export default function LibraryView(): React.ReactElement {
-  const { tracks, setTracks, setQueue } = useApp()
+  const { tracks, setTracks, setQueue, notify } = useApp()
   const [search, setSearch] = useState('')
   const [groupMode, setGroupMode] = useState<GroupMode>('all')
   const [instrumentType, setInstrumentType] = useState<'all' | 'vocal' | 'instrumental'>('all')
   const [sortBy, setSortBy] = useState<'title' | 'artist' | 'album' | 'genre'>('title')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [scanning, setScanning] = useState(false)
-
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   const filtered = useMemo(() => {
     let result = [...tracks]
@@ -62,22 +60,14 @@ export default function LibraryView(): React.ReactElement {
       const result = await window.yukinon.library.scan(folderPath) as { added: number; total: number }
       const updated = await window.yukinon.library.getTracks() as Track[]
       setTracks(updated)
-      setNotification({
-        message: `Scanned ${result.total} files, added ${result.added} new tracks.`,
-        type: 'success'
-      })
-      setTimeout(() => setNotification(null), 4000)
+      notify(`Scanned ${result.total} files, added ${result.added} new tracks.`, 'success')
     } catch (err) {
       console.error(err)
-      setNotification({
-        message: 'Failed to scan the folder.',
-        type: 'error'
-      })
-      setTimeout(() => setNotification(null), 4000)
+      notify('Failed to scan the folder.', 'error')
     } finally {
       setScanning(false)
     }
-  }, [setTracks])
+  }, [setTracks, notify])
 
   const handlePlayAll = useCallback(() => {
     if (filtered.length > 0) {
@@ -98,21 +88,6 @@ export default function LibraryView(): React.ReactElement {
         position: 'relative'
       }}
     >
-      {notification && (
-        <div
-          className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-3 rounded-xl shadow-lg border backdrop-blur-md transition-all duration-300"
-          style={{
-            background: notification.type === 'success' ? 'rgba(162, 238, 203, 0.08)' : 'rgba(248, 113, 113, 0.08)',
-            borderColor: notification.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-            color: notification.type === 'success' ? '#34d399' : '#f87171',
-            boxShadow: notification.type === 'success' 
-              ? '0 10px 25px -5px rgba(16, 185, 129, 0.1), 0 8px 10px -6px rgba(16, 185, 129, 0.1)'
-              : '0 10px 25px -5px rgba(239, 68, 68, 0.1), 0 8px 10px -6px rgba(239, 68, 68, 0.1)'
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 500 }}>{notification.message}</span>
-        </div>
-      )}
       {/* Toolbar */}
       <div
         style={{

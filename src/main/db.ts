@@ -38,10 +38,11 @@ export function initDatabase(): void {
     );
 
     CREATE TABLE IF NOT EXISTS playlist_tracks (
+      id TEXT PRIMARY KEY,
       playlist_id TEXT REFERENCES playlists(id) ON DELETE CASCADE,
-      track_id TEXT REFERENCES tracks(id) ON DELETE CASCADE,
-      position INTEGER NOT NULL,
-      PRIMARY KEY (playlist_id, track_id)
+      track_id TEXT NOT NULL,
+      track_json TEXT NOT NULL,
+      position INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS eq_presets (
@@ -87,6 +88,24 @@ export function initDatabase(): void {
   try {
     db.exec('ALTER TABLE tracks ADD COLUMN is_favorite BOOLEAN DEFAULT 0;')
   } catch (e) { /* ignore */ }
+
+  try {
+    // Migrate to universal playlists by dropping the old constrained table if it lacks track_json
+    const tableInfo = db.pragma("table_info(playlist_tracks)") as any[];
+    const hasJsonCol = tableInfo.some(col => col.name === 'track_json');
+    if (!hasJsonCol && tableInfo.length > 0) {
+      db.exec('DROP TABLE playlist_tracks;');
+      db.exec(`
+        CREATE TABLE playlist_tracks (
+          id TEXT PRIMARY KEY,
+          playlist_id TEXT REFERENCES playlists(id) ON DELETE CASCADE,
+          track_id TEXT NOT NULL,
+          track_json TEXT NOT NULL,
+          position INTEGER NOT NULL
+        );
+      `);
+    }
+  } catch (e) { console.error('[DB] Playlist migration failed', e); }
 
   // Clear base64 artworks to fix 2GB freeze
   const hasArtworks = db.prepare('SELECT 1 FROM tracks WHERE artwork IS NOT NULL LIMIT 1').get()

@@ -11,7 +11,7 @@ export default function QueueView(): React.ReactElement {
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {queue.length > 0 ? (
-          <TrackList tracks={queue} />
+          <TrackList tracks={queue} isQueueView={true} />
         ) : (
           <div style={{ padding: 20, color: 'var(--text-dim)' }}>Queue is empty.</div>
         )}

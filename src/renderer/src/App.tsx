@@ -18,16 +18,44 @@ import FullscreenPlayer from './components/FullscreenPlayer'
 
 // Inner app component that has access to context
 function AppInner(): React.ReactElement {
-  const { activeView } = useApp()
+  const { activeView, notification } = useApp()
   const showTitleBar = window.yukinon.platform === 'darwin'
 
   return (
     <div
-      className="flex flex-col"
+      className="flex flex-col relative"
       style={{ height: '100vh', background: 'var(--bg)', color: 'var(--text)' }}
     >
       {/* Custom Title Bar */}
       {showTitleBar && <TitleBar />}
+
+      {/* Global Notification Toast */}
+      {notification && (
+        <div
+          style={{
+            position: 'absolute',
+            top: showTitleBar ? 48 : 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 24px',
+            borderRadius: 12,
+            background: notification.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            border: `1px solid ${notification.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+            color: notification.type === 'success' ? '#34d399' : '#f87171',
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+            fontSize: 13,
+            fontWeight: 500,
+            pointerEvents: 'none'
+          }}
+        >
+          {notification.message}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">

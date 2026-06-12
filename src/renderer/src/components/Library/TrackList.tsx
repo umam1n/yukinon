@@ -1,7 +1,8 @@
 import React from 'react'
 import { useApp } from '../../store/AppContext'
-import { Music2 } from 'lucide-react'
+import { Music2, PlusCircle } from 'lucide-react'
 import type { Track } from '../../../../../../shared/types'
+import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
 
 function formatDuration(secs: number): string {
   if (!secs) return ''
@@ -10,8 +11,9 @@ function formatDuration(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function TrackList({ tracks }: { tracks: Track[] }): React.ReactElement {
-  const { setQueue, player } = useApp()
+export default function TrackList({ tracks, isQueueView }: { tracks: Track[], isQueueView?: boolean }): React.ReactElement {
+  const { setQueue, player, removeFromQueue } = useApp()
+  const [trackToPlaylist, setTrackToPlaylist] = React.useState<Track | null>(null)
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
@@ -19,7 +21,7 @@ export default function TrackList({ tracks }: { tracks: Track[] }): React.ReactE
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '40px 40px 1fr 1fr 120px 60px',
+          gridTemplateColumns: '40px 40px 1fr 1fr 120px 60px 60px',
           gap: 16,
           padding: '8px 24px',
           fontSize: 11,
@@ -37,6 +39,7 @@ export default function TrackList({ tracks }: { tracks: Track[] }): React.ReactE
         <span>Album</span>
         <span>Format</span>
         <span style={{ textAlign: 'right' }}>Time</span>
+        <span style={{ textAlign: 'right' }}></span>
       </div>
 
       {tracks.map((track, i) => {
@@ -49,7 +52,7 @@ export default function TrackList({ tracks }: { tracks: Track[] }): React.ReactE
             onDoubleClick={() => setQueue(tracks, i)}
             style={{
               display: 'grid',
-              gridTemplateColumns: '40px 40px 1fr 1fr 120px 60px',
+              gridTemplateColumns: '40px 40px 1fr 1fr 120px 60px 60px',
               gap: 16,
               padding: '8px 24px',
               alignItems: 'center',
@@ -188,9 +191,49 @@ export default function TrackList({ tracks }: { tracks: Track[] }): React.ReactE
             >
               {formatDuration(track.duration)}
             </div>
+
+            {/* Actions */}
+            <div style={{ textAlign: 'right', display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setTrackToPlaylist(track) }}
+                title="Add to Playlist"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-dim)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '4px'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)' }}
+              >
+                <PlusCircle size={16} />
+              </button>
+              {isQueueView && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeFromQueue(i) }}
+                  title="Remove from Queue"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-dim)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              )}
+            </div>
           </div>
         )
       })}
+      
+      <AddToPlaylistModal track={trackToPlaylist} onClose={() => setTrackToPlaylist(null)} />
     </div>
   )
 }

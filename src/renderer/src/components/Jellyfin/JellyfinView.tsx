@@ -13,9 +13,10 @@ import {
   type JellyfinConfig
 } from '../../lib/jellyfin'
 import type { Track } from '../../../../shared/types'
+import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
 
 export default function JellyfinView(): React.ReactElement {
-  const { play, setQueue, addToQueue } = useApp()
+  const { play, setQueue, addToQueue, notify } = useApp()
   const [config, setConfig] = useState<JellyfinConfig | null>(getJellyfinConfig())
   const [isConfiguring, setIsConfiguring] = useState(!config)
 
@@ -33,6 +34,8 @@ export default function JellyfinView(): React.ReactElement {
   const [songs, setSongs] = useState<any[]>([])
   const [playlists, setPlaylists] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [trackToPlaylist, setTrackToPlaylist] = useState<Track | null>(null)
 
   // Load saved config on mount
   useEffect(() => {
@@ -47,27 +50,31 @@ export default function JellyfinView(): React.ReactElement {
     })
   }, [])
 
-  // Fetch library when config or tab changes
+  // Fetch library when config, tab, or search changes
   useEffect(() => {
-    if (config && !isConfiguring && config.accessToken) {
-      loadTabContent(activeTab)
-    }
-  }, [config, isConfiguring, activeTab])
+    const t = setTimeout(() => {
+      if (config && !isConfiguring && config.accessToken) {
+        loadTabContent(activeTab)
+      }
+    }, 500)
+    return () => clearTimeout(t)
+  }, [config, isConfiguring, activeTab, searchQuery])
 
   const loadTabContent = async (tab: 'albums' | 'artists' | 'songs' | 'playlists') => {
     setIsLoading(true)
     setError('')
     try {
       if (tab === 'albums') {
-        const res = await getAlbums()
+        const res = await getAlbums(undefined, searchQuery)
         if (res && res.Items) setAlbums(res.Items)
       } else if (tab === 'artists') {
-        const res = await getArtists()
+        const res = await getArtists(searchQuery)
         if (res && res.Items) setArtists(res.Items)
       } else if (tab === 'songs') {
-        const res = await getSongs()
+        const res = await getSongs(searchQuery)
         if (res && res.Items) setSongs(res.Items)
       } else if (tab === 'playlists') {
+        // Jellyfin Playlists don't support simple SearchTerm easily, or we just rely on generic items query
         const res = await getPlaylists()
         if (res && res.Items) setPlaylists(res.Items)
       }
@@ -135,48 +142,63 @@ export default function JellyfinView(): React.ReactElement {
     }
   }
 
-  const handlePlayAlbum = async (album: any) => {
+  const handlePlayAlbum = async (album: any, shuffle = false) => {
     try {
       const { getAlbumTracks } = await import('../../lib/jellyfin')
       const res = await getAlbumTracks(album.Id)
       const items = res.Items
 
       if (items && items.length > 0) {
-        const mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        let mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        if (shuffle) {
+          mappedTracks = mappedTracks.sort(() => Math.random() - 0.5)
+        }
         setQueue(mappedTracks, 0)
+        notify(`Playing album ${shuffle ? 'shuffled' : ''}`)
       }
     } catch (err) {
       console.error('Failed to play album:', err)
+      notify('Failed to play album', 'error')
     }
   }
 
-  const handlePlayArtist = async (artist: any) => {
+  const handlePlayArtist = async (artist: any, shuffle = false) => {
     try {
       const { getArtistTracks } = await import('../../lib/jellyfin')
       const res = await getArtistTracks(artist.Id)
       const items = res.Items
 
       if (items && items.length > 0) {
-        const mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        let mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        if (shuffle) {
+          mappedTracks = mappedTracks.sort(() => Math.random() - 0.5)
+        }
         setQueue(mappedTracks, 0)
+        notify(`Playing artist ${shuffle ? 'shuffled' : ''}`)
       }
     } catch (err) {
       console.error('Failed to play artist tracks:', err)
+      notify('Failed to play artist', 'error')
     }
   }
 
-  const handlePlayPlaylist = async (playlist: any) => {
+  const handlePlayPlaylist = async (playlist: any, shuffle = false) => {
     try {
       const { getAlbumTracks } = await import('../../lib/jellyfin')
       const res = await getAlbumTracks(playlist.Id)
       const items = res.Items
 
       if (items && items.length > 0) {
-        const mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        let mappedTracks = items.map((item: any) => mapJellyfinTrack(item))
+        if (shuffle) {
+          mappedTracks = mappedTracks.sort(() => Math.random() - 0.5)
+        }
         setQueue(mappedTracks, 0)
+        notify(`Playing playlist ${shuffle ? 'shuffled' : ''}`)
       }
     } catch (err) {
       console.error('Failed to play playlist tracks:', err)
+      notify('Failed to play playlist', 'error')
     }
   }
 
@@ -186,7 +208,16 @@ export default function JellyfinView(): React.ReactElement {
   }
 
   const handleAddToQueue = (song: any) => {
-    addToQueue(mapJellyfinTrack(song))
+    const track = mapJellyfinTrack(song)
+    addToQueue(track)
+    notify('Added to queue')
+  }
+
+  const handleShuffleAllSongs = () => {
+    if (songs.length === 0) return
+    const mappedTracks = songs.map((s) => mapJellyfinTrack(s)).sort(() => Math.random() - 0.5)
+    setQueue(mappedTracks, 0)
+    notify(`Playing ${songs.length} songs shuffled`)
   }
 
   if (isConfiguring) {
@@ -301,12 +332,30 @@ export default function JellyfinView(): React.ReactElement {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setIsConfiguring(true)}
-          style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text)', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
-        >
-          Server Settings
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            type="text"
+            placeholder="Search (live, instrument, etc...)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              background: 'rgba(0,0,0,0.2)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 8,
+              padding: '8px 16px',
+              color: 'var(--text)',
+              fontSize: 14,
+              outline: 'none',
+              width: 250
+            }}
+          />
+          <button
+            onClick={() => setIsConfiguring(true)}
+            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text)', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
+          >
+            Server Settings
+          </button>
+        </div>
       </div>
 
       {error && <div style={{ color: '#ef4444', marginBottom: 24, background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 8 }}>{error}</div>}
@@ -386,10 +435,13 @@ export default function JellyfinView(): React.ReactElement {
                     >
                       <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.2)', position: 'relative' }}>
                         {coverUrl ? <img src={coverUrl} alt={album.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Disc size={32} /></div>}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity">
-                          <div className="w-12 h-12 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg">
-                            <Play size={20} fill="currentColor" />
-                          </div>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity gap-2">
+                          <button onClick={(e) => { e.stopPropagation(); handlePlayAlbum(album, false) }} className="w-10 h-10 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg hover:scale-110 transition-transform">
+                            <Play size={18} fill="currentColor" />
+                          </button>
+                          <button title="Shuffle Play" onClick={(e) => { e.stopPropagation(); handlePlayAlbum(album, true) }} className="w-10 h-10 rounded-full bg-[rgba(255,255,255,0.2)] text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l4.1-5.8c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.8.8 3.6 2l3.5 5.2c.9 1.3 2.4 2.1 4 2.1H22"/><path d="m18 22 4-4-4-4"/></svg>
+                          </button>
                         </div>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
@@ -441,9 +493,18 @@ export default function JellyfinView(): React.ReactElement {
                         margin: '0 auto 12px auto',
                         background: 'rgba(255,255,255,0.03)',
                         boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
-                        border: '1px solid rgba(255,255,255,0.05)'
-                      }}>
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        position: 'relative'
+                      }} className="group">
                         {coverUrl ? <img src={coverUrl} alt={artist.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={32} /></div>}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity gap-2">
+                          <button onClick={(e) => { e.stopPropagation(); handlePlayArtist(artist, false) }} className="w-10 h-10 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg hover:scale-110 transition-transform">
+                            <Play size={18} fill="currentColor" />
+                          </button>
+                          <button title="Shuffle Play" onClick={(e) => { e.stopPropagation(); handlePlayArtist(artist, true) }} className="w-10 h-10 rounded-full bg-[rgba(255,255,255,0.2)] text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l4.1-5.8c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.8.8 3.6 2l3.5 5.2c.9 1.3 2.4 2.1 4 2.1H22"/><path d="m18 22 4-4-4-4"/></svg>
+                          </button>
+                        </div>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                         {artist.Name}
@@ -458,6 +519,28 @@ export default function JellyfinView(): React.ReactElement {
             {/* Songs Tab */}
             {activeTab === 'songs' && (
               <div style={{ overflowX: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                  <button
+                    onClick={handleShuffleAllSongs}
+                    disabled={songs.length === 0}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 16px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'var(--color-accent)',
+                      color: '#fff',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: songs.length ? 'pointer' : 'not-allowed',
+                      opacity: songs.length ? 1 : 0.5
+                    }}
+                  >
+                    Shuffle All
+                  </button>
+                </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-dim)' }}>
@@ -530,6 +613,21 @@ export default function JellyfinView(): React.ReactElement {
                               >
                                 + Queue
                               </button>
+                              <button
+                                onClick={() => setTrackToPlaylist(mapJellyfinTrack(song))}
+                                style={{
+                                  background: 'rgba(255,255,255,0.08)',
+                                  color: 'var(--text)',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  padding: '6px 12px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                + Playlist
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -573,10 +671,13 @@ export default function JellyfinView(): React.ReactElement {
                     >
                       <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.2)', position: 'relative' }}>
                         {coverUrl ? <img src={coverUrl} alt={playlist.Name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ListMusic size={32} /></div>}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity">
-                          <div className="w-12 h-12 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg">
-                            <Play size={20} fill="currentColor" />
-                          </div>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity gap-2">
+                          <button onClick={(e) => { e.stopPropagation(); handlePlayPlaylist(playlist, false) }} className="w-10 h-10 rounded-full bg-accent text-black flex items-center justify-center pl-1 shadow-lg hover:scale-110 transition-transform">
+                            <Play size={18} fill="currentColor" />
+                          </button>
+                          <button title="Shuffle Play" onClick={(e) => { e.stopPropagation(); handlePlayPlaylist(playlist, true) }} className="w-10 h-10 rounded-full bg-[rgba(255,255,255,0.2)] text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l4.1-5.8c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.8.8 3.6 2l3.5 5.2c.9 1.3 2.4 2.1 4 2.1H22"/><path d="m18 22 4-4-4-4"/></svg>
+                          </button>
                         </div>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
@@ -594,6 +695,7 @@ export default function JellyfinView(): React.ReactElement {
           </>
         )}
       </div>
+      <AddToPlaylistModal track={trackToPlaylist} onClose={() => setTrackToPlaylist(null)} />
     </div>
   )
 }

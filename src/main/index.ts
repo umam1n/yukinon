@@ -3,6 +3,7 @@ import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerLibraryHandlers } from './ipc/library'
+import { registerPlaylistsHandlers } from './ipc/playlists'
 import { registerEQHandlers } from './ipc/eq'
 import { registerDeviceHandlers } from './ipc/devices'
 import { registerThemeHandlers } from './ipc/theme'
@@ -44,7 +45,8 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: false // allow file:// access for local tracks
-    }
+    },
+    alwaysOnTop: !!getSetting('always_on_top')
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -79,15 +81,25 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 function setupGlobalShortcuts(): void {
-  globalShortcut.register('MediaPlayPause', () => {
-    mainWindow.webContents.send('media:playPause')
-  })
-  globalShortcut.register('MediaNextTrack', () => {
-    mainWindow.webContents.send('media:next')
-  })
-  globalShortcut.register('MediaPreviousTrack', () => {
-    mainWindow.webContents.send('media:prev')
-  })
+  globalShortcut.unregisterAll()
+  
+  // Default to enabled (1) if not explicitly disabled (0)
+  const setting = getSetting('global_hotkeys')
+  const hotkeysEnabled = setting !== 0
+  
+  const customHotkeys = (getSetting('custom_hotkeys') as any) || {
+    playPause: 'MediaPlayPause',
+    nextTrack: 'MediaNextTrack',
+    prevTrack: 'MediaPreviousTrack'
+  }
+
+  try {
+    if (customHotkeys.playPause) globalShortcut.register(customHotkeys.playPause, () => mainWindow.webContents.send('media:playPause'))
+    if (customHotkeys.nextTrack) globalShortcut.register(customHotkeys.nextTrack, () => mainWindow.webContents.send('media:next'))
+    if (customHotkeys.prevTrack) globalShortcut.register(customHotkeys.prevTrack, () => mainWindow.webContents.send('media:prev'))
+  } catch (err) {
+    console.error('Failed to register global shortcuts:', err)
+  }
 }
 
 app.whenReady().then(async () => {
@@ -148,6 +160,7 @@ app.whenReady().then(async () => {
 
   // Register IPC handlers
   registerLibraryHandlers(ipcMain)
+  registerPlaylistsHandlers(ipcMain)
   registerEQHandlers(ipcMain, mainWindow)
   registerDeviceHandlers(ipcMain)
   registerThemeHandlers(ipcMain, mainWindow)
@@ -172,6 +185,30 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.handle('window:close', () => mainWindow.close())
+  ipcMain.handle('window:setAlwaysOnTop', (_, isAlwaysOnTop: boolean) => {
+    mainWindow.setAlwaysOnTop(isAlwaysOnTop)
+    setSetting('always_on_top', isAlwaysOnTop ? 1 : 0)
+  })
+  ipcMain.handle('window:getAlwaysOnTop', () => !!getSetting('always_on_top'))
+  ipcMain.handle('window:setGlobalHotkeys', (_, enabled: boolean) => {
+    setSetting('global_hotkeys', enabled ? 1 : 0)
+    setupGlobalShortcuts()
+  })
+  ipcMain.handle('window:getGlobalHotkeys', () => {
+    const setting = getSetting('global_hotkeys')
+    return setting !== 0
+  })
+  ipcMain.handle('window:setCustomHotkeys', (_, hotkeys: any) => {
+    setSetting('custom_hotkeys', hotkeys)
+    setupGlobalShortcuts()
+  })
+  ipcMain.handle('window:getCustomHotkeys', () => {
+    return (getSetting('custom_hotkeys') as any) || {
+      playPause: 'MediaPlayPause',
+      nextTrack: 'MediaNextTrack',
+      prevTrack: 'MediaPreviousTrack'
+    }
+  })
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

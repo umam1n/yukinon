@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Moon, Sun, Palette, FolderOpen, Trash2, Info, RefreshCw, Copy, ShieldCheck, Blocks } from 'lucide-react'
+import { Moon, Sun, Palette, FolderOpen, Trash2, Info, RefreshCw, Copy, ShieldCheck, Blocks, Layers, Keyboard } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 
 const ACCENT_PRESETS = [
@@ -21,9 +21,20 @@ export default function SettingsView(): React.ReactElement {
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null)
   const [removingDuplicates, setRemovingDuplicates] = useState(false)
 
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false)
+  const [globalHotkeys, setGlobalHotkeys] = useState(true)
+  const [customHotkeys, setCustomHotkeysState] = useState<{ playPause: string, nextTrack: string, prevTrack: string }>({
+    playPause: 'MediaPlayPause',
+    nextTrack: 'MediaNextTrack',
+    prevTrack: 'MediaPreviousTrack'
+  })
+
   // Load saved folders on mount
   React.useEffect(() => {
     window.yukinon.library.getFolders().then((f) => setFolders(f as string[]))
+    window.yukinon.window.getAlwaysOnTop().then((val) => setAlwaysOnTop(val))
+    window.yukinon.window.getGlobalHotkeys().then((val) => setGlobalHotkeys(val))
+    window.yukinon.window.getCustomHotkeys().then((val) => setCustomHotkeysState(val))
   }, [])
 
   const handleRemoveFolder = async (folder: string): Promise<void> => {
@@ -90,6 +101,42 @@ export default function SettingsView(): React.ReactElement {
     } finally {
       setRemovingDuplicates(false)
     }
+  }
+
+  const updateHotkey = async (action: 'playPause' | 'nextTrack' | 'prevTrack', e: React.KeyboardEvent) => {
+    e.preventDefault()
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return
+
+    const keys: string[] = []
+    if (e.ctrlKey && !e.metaKey) keys.push('Ctrl')
+    if (e.metaKey) keys.push('Cmd')
+    if (e.altKey) keys.push('Alt')
+    if (e.shiftKey) keys.push('Shift')
+
+    let keyStr = ''
+    if (e.code.startsWith('Key')) keyStr = e.code.replace('Key', '')
+    else if (e.code.startsWith('Digit')) keyStr = e.code.replace('Digit', '')
+    else if (e.code.startsWith('Arrow')) keyStr = e.code.replace('Arrow', '')
+    else if (e.code.startsWith('F') && e.code.length <= 3) keyStr = e.code
+    else if (e.code === 'Space') keyStr = 'Space'
+    else if (e.code === 'Enter') keyStr = 'Enter'
+    else if (e.code === 'Backspace') keyStr = 'Backspace'
+    else if (e.code === 'Delete') keyStr = 'Delete'
+    else if (e.code === 'Escape') keyStr = 'Esc'
+    else if (e.code === 'Tab') keyStr = 'Tab'
+    else if (e.key === 'MediaPlayPause') keyStr = 'MediaPlayPause'
+    else if (e.key === 'MediaTrackNext') keyStr = 'MediaNextTrack'
+    else if (e.key === 'MediaTrackPrevious') keyStr = 'MediaPreviousTrack'
+    else return
+
+    keys.push(keyStr)
+    const hotkeyCombo = keys.join('+')
+
+    const newHotkeys = { ...customHotkeys, [action]: hotkeyCombo }
+    setCustomHotkeysState(newHotkeys)
+    await window.yukinon.window.setCustomHotkeys(newHotkeys)
+    setNotification({ message: `Updated hotkey to ${hotkeyCombo}`, type: 'success' })
+    setTimeout(() => setNotification(null), 3000)
   }
 
   return (
@@ -236,6 +283,39 @@ export default function SettingsView(): React.ReactElement {
             </div>
           </SettingRow>
         </Section>
+
+        {/* Behavior */}
+        <Section title="Behavior" icon={<Layers size={16} />}>
+          <SettingRow label="Always on Top" description="Keep Yukinon visible over other applications">
+            <Toggle checked={alwaysOnTop} onChange={async () => {
+              const next = !alwaysOnTop
+              await window.yukinon.window.setAlwaysOnTop(next)
+              setAlwaysOnTop(next)
+            }} />
+          </SettingRow>
+          <SettingRow label="Global Hotkeys" description="Allow keyboard shortcuts to control playback while app is in background">
+            <Toggle checked={globalHotkeys} onChange={async () => {
+              const next = !globalHotkeys
+              await window.yukinon.window.setGlobalHotkeys(next)
+              setGlobalHotkeys(next)
+            }} />
+          </SettingRow>
+        </Section>
+
+        {/* Global Shortcuts Mapping */}
+        {globalHotkeys && (
+          <Section title="Shortcut Mapping" icon={<Keyboard size={16} />}>
+            <SettingRow label="Play / Pause" description="Global shortcut to toggle playback">
+              <HotkeyInput value={customHotkeys.playPause} onKeyDown={(e) => updateHotkey('playPause', e)} />
+            </SettingRow>
+            <SettingRow label="Next Track" description="Global shortcut to skip forward">
+              <HotkeyInput value={customHotkeys.nextTrack} onKeyDown={(e) => updateHotkey('nextTrack', e)} />
+            </SettingRow>
+            <SettingRow label="Previous Track" description="Global shortcut to skip backward">
+              <HotkeyInput value={customHotkeys.prevTrack} onKeyDown={(e) => updateHotkey('prevTrack', e)} />
+            </SettingRow>
+          </Section>
+        )}
 
         {/* Integrations */}
         <Section title="Integrations & Modules" icon={<Blocks size={16} />}>
@@ -497,6 +577,44 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
           transition: 'all 0.2s'
         }}
       />
+    </button>
+  )
+}
+
+function HotkeyInput({ value, onKeyDown }: { value: string, onKeyDown: (e: React.KeyboardEvent) => void }): React.ReactElement {
+  const [isRecording, setIsRecording] = useState(false)
+
+  return (
+    <button
+      onClick={() => setIsRecording(true)}
+      onBlur={() => setIsRecording(false)}
+      onKeyDown={(e) => {
+        if (isRecording) {
+          onKeyDown(e)
+          setIsRecording(false)
+        }
+      }}
+      style={{
+        background: isRecording ? 'rgba(var(--color-accent-rgb), 0.15)' : 'var(--bg-3)',
+        border: `1px solid ${isRecording ? 'var(--color-accent)' : 'var(--border)'}`,
+        color: isRecording ? 'var(--color-accent)' : 'var(--text)',
+        padding: '6px 12px',
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        minWidth: 120,
+        textAlign: 'center',
+        outline: 'none',
+        boxShadow: isRecording ? '0 0 0 2px rgba(var(--color-accent-rgb), 0.2)' : 'none',
+        transition: 'all 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6
+      }}
+    >
+      {isRecording ? 'Recording...' : value || 'Click to bind'}
     </button>
   )
 }

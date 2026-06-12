@@ -2,11 +2,16 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // Expose typed IPC API to the renderer process
 const api = {
-  // Window controls
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
-    close: () => ipcRenderer.invoke('window:close')
+    close: () => ipcRenderer.invoke('window:close'),
+    setAlwaysOnTop: (isAlwaysOnTop: boolean) => ipcRenderer.invoke('window:setAlwaysOnTop', isAlwaysOnTop),
+    getAlwaysOnTop: () => ipcRenderer.invoke('window:getAlwaysOnTop'),
+    setGlobalHotkeys: (enabled: boolean) => ipcRenderer.invoke('window:setGlobalHotkeys', enabled),
+    getGlobalHotkeys: () => ipcRenderer.invoke('window:getGlobalHotkeys'),
+    setCustomHotkeys: (hotkeys: any) => ipcRenderer.invoke('window:setCustomHotkeys', hotkeys),
+    getCustomHotkeys: () => ipcRenderer.invoke('window:getCustomHotkeys')
   },
 
   // Library
@@ -22,6 +27,16 @@ const api = {
     removeFolder: (folderPath: string) => ipcRenderer.invoke('library:removeFolder', folderPath),
     findDuplicates: () => ipcRenderer.invoke('library:findDuplicates'),
     removeDuplicates: () => ipcRenderer.invoke('library:removeDuplicates')
+  },
+
+  // Playlists
+  playlists: {
+    create: (name: string) => ipcRenderer.invoke('playlists:create', name),
+    delete: (id: string) => ipcRenderer.invoke('playlists:delete', id),
+    getAll: () => ipcRenderer.invoke('playlists:getAll'),
+    getTracks: (id: string) => ipcRenderer.invoke('playlists:getTracks', id),
+    addTrack: (playlistId: string, track: any) => ipcRenderer.invoke('playlists:addTrack', playlistId, track),
+    removeTrack: (playlistTrackId: string) => ipcRenderer.invoke('playlists:removeTrack', playlistTrackId)
   },
 
   // Equalizer

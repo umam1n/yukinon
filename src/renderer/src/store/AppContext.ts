@@ -18,6 +18,7 @@ export interface AppStore {
   queue: Track[]
   setQueue: (queue: Track[], startIndex?: number) => void
   addToQueue: (track: Track) => void
+  removeFromQueue: (index: number) => void
   currentQueueIndex: number
   playbackMode: 'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'
   togglePlaybackMode: () => void
@@ -44,6 +45,10 @@ export interface AppStore {
   // Modules
   activeModules: { ytm: boolean; radio: boolean; subsonic: boolean; jellyfin: boolean }
   setActiveModules: (modules: Partial<{ ytm: boolean; radio: boolean; subsonic: boolean; jellyfin: boolean }>) => void
+
+  // Notifications
+  notification: { message: string; type: 'success' | 'error' } | null
+  notify: (message: string, type: 'success' | 'error') => void
 }
 
 export const AppContext = createContext<AppStore | null>(null)

@@ -90,7 +90,7 @@ export async function login(): Promise<void> {
   throw new Error('No password or accessToken provided')
 }
 
-export async function getAlbums(parentId?: string) {
+export async function getAlbums(parentId?: string, searchTerm?: string) {
   if (!config || !api) throw new Error('Jellyfin config not set')
   const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
   
@@ -103,6 +103,7 @@ export async function getAlbums(parentId?: string) {
   })
   
   if (parentId) params.append('ParentId', parentId)
+  if (searchTerm) params.append('SearchTerm', searchTerm)
   
   const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch albums')
@@ -137,7 +138,7 @@ export async function getStreamUrl(id: string): Promise<string> {
   return `${safeUrl}/Items/${id}/Download?api_key=${config.accessToken}`
 }
 
-export async function getArtists() {
+export async function getArtists(searchTerm?: string) {
   if (!config || !api) throw new Error('Jellyfin config not set')
   const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
   
@@ -148,13 +149,15 @@ export async function getArtists() {
     SortOrder: 'Ascending',
     api_key: config.accessToken!
   })
+
+  if (searchTerm) params.append('SearchTerm', searchTerm)
   
   const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch artists')
   return await res.json()
 }
 
-export async function getSongs() {
+export async function getSongs(searchTerm?: string) {
   if (!config || !api) throw new Error('Jellyfin config not set')
   const safeUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
   
@@ -165,6 +168,8 @@ export async function getSongs() {
     SortOrder: 'Ascending',
     api_key: config.accessToken!
   })
+
+  if (searchTerm) params.append('SearchTerm', searchTerm)
   
   const res = await fetch(`${safeUrl}/Users/${config.userId}/Items?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch songs')

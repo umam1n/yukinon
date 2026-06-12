@@ -98,21 +98,6 @@ export default function Sidebar(): React.ReactElement {
               }
             }}
           >
-            {/* Active indicator dot */}
-            {isActive && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 4,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 3,
-                  height: 16,
-                  borderRadius: 100,
-                  background: 'var(--color-accent)'
-                }}
-              />
-            )}
             {item.icon}
             <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               {item.label.split(' ')[0]}

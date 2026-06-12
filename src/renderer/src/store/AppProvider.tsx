@@ -40,6 +40,14 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [playbackMode, setPlaybackMode] = useState<'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'>('normal')
   const [isSmartPlay, setIsSmartPlay] = useState(false)
   const [activeModules, setActiveModulesState] = useState({ ytm: false, radio: false, subsonic: false, jellyfin: false })
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  const notify = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type })
+    setTimeout(() => {
+      setNotification((current) => (current?.message === message ? null : current))
+    }, 3000)
+  }, [])
 
   const setActiveModules = useCallback((updates: Partial<{ ytm: boolean; radio: boolean; subsonic: boolean; jellyfin: boolean }>) => {
     setActiveModulesState((prev) => {
@@ -222,12 +230,26 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     [play]
   )
 
-  const addToQueue = useCallback(
-    (track: Track) => {
-      setQueueState((prev) => [...prev, track])
-    },
-    []
-  )
+  const addToQueue = useCallback((track: Track) => {
+    setQueueState((prev) => [...prev, track])
+  }, [])
+
+  const removeFromQueue = useCallback((index: number) => {
+    setQueueState((prev) => {
+      const newQueue = [...prev]
+      newQueue.splice(index, 1)
+      return newQueue
+    })
+    setCurrentQueueIndex((prevIdx) => {
+      if (index < prevIdx) return prevIdx - 1
+      if (index === prevIdx) {
+        // If we removed the currently playing track, we should probably handle playback stopping or playing next,
+        // but for now let's just keep it at the same index so it plays the next track in the queue naturally.
+        return prevIdx
+      }
+      return prevIdx
+    })
+  }, [])
 
   // Initialize Players and Global Listeners
   useEffect(() => {
@@ -316,8 +338,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     })
 
     const unsubTheme = yukinon.theme.onChange((t) => {
-      setThemeState((prev) => ({ ...prev, ...(t as Partial<AppTheme>) }))
-      applyThemeToDOM({ ...theme, ...(t as Partial<AppTheme>) })
+      setThemeState((prev) => {
+        const next = { ...prev, ...(t as Partial<AppTheme>) }
+        applyThemeToDOM(next)
+        return next
+      })
     })
 
     // Media keys
@@ -377,6 +402,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         queue,
         setQueue,
         addToQueue,
+        removeFromQueue,
         currentQueueIndex,
         playbackMode,
         togglePlaybackMode: () => {
@@ -401,7 +427,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         eqPresets, activePresetId, setActivePresetId, saveEqPreset,
         theme, setTheme,
         activeView, setActiveView,
-        activeModules, setActiveModules
+        activeModules,
+        setActiveModules,
+        notification,
+        notify
       }}
     >
       {children}
