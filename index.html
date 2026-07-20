@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob: file: yukinon:; media-src * data: blob: yukinon:; connect-src *;" />
+    <title>YUKINON</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="error-log" style="position:fixed;top:0;left:0;width:100%;background:rgba(255,0,0,0.8);color:white;z-index:9999;font-size:12px;padding:10px;white-space:pre-wrap;display:none;pointer-events:none;max-height:100%;overflow:auto;"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.getElementById('error-log');
+        el.style.display = 'block';
+        el.textContent += 'Error: ' + e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' + (e.error ? e.error.stack : '') + '\n\n';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var el = document.getElementById('error-log');
+        el.style.display = 'block';
+        el.textContent += 'Unhandled Promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '\n' + (e.reason ? e.reason.stack : '') + '\n\n';
+      });
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,37 @@
+
+> aura@0.1.0 dev
+> NODE_OPTIONS="--max-old-space-size=4096" electron-vite dev
+
+vite v5.4.21 building SSR bundle for development...
+transforming...
+✓ 8 modules transformed.
+rendering chunks...
+out/main/index.js  22.38 kB
+✓ built in 414ms
+
+build the electron main process successfully
+
+-----
+
+vite v5.4.21 building SSR bundle for development...
+transforming...
+✓ 2 modules transformed.
+Generated an empty chunk: "ytm".
+rendering chunks...
+out/preload/ytm.mjs    0.00 kB
+out/preload/index.mjs  3.32 kB
+✓ built in 22ms
+
+build the electron preload files successfully
+
+-----
+
+Port 5173 is in use, trying another one...
+dev server running for the electron renderer process at:
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
+
+start electron app...
+
+2:22:47 PM [vite] hmr update /src/components/Library/LibraryView.tsx, /src/styles/globals.css
