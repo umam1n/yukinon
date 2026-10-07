@@ -37,10 +37,48 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     accent2Color: '#67e8f9'
   })
   const [activeView, setActiveView] = useState<AppStore['activeView']>('library')
+  const [shuffle, setShuffle] = useState(false)
+  const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off')
   const [playbackMode, setPlaybackMode] = useState<'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'>('normal')
   const [isSmartPlay, setIsSmartPlay] = useState(false)
   const [activeModules, setActiveModulesState] = useState({ ytm: false, radio: false, subsonic: false, jellyfin: false })
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  const [renderAlbumArt, setRenderAlbumArtState] = useState(true)
+  const [reduceBlur, setReduceBlurState] = useState(false)
+  const renderAlbumArtRef = useRef(true)
+
+  const [replaygainEnabled, setReplaygainEnabledState] = useState(true)
+  const [replaygainPreamp, setReplaygainPreampState] = useState(0)
+  const currentTrackRef = useRef<Track | null>(null)
+
+  const setReplayGainEnabled = useCallback((enabled: boolean) => {
+    setReplaygainEnabledState(enabled)
+    window.yukinon.settings.set('replaygain_enabled', enabled ? 'true' : 'false')
+    audioEngine.applyReplayGain(currentTrackRef.current, replaygainPreamp, enabled)
+  }, [replaygainPreamp])
+
+  const setReplayGainPreamp = useCallback((preamp: number) => {
+    setReplaygainPreampState(preamp)
+    window.yukinon.settings.set('replaygain_preamp', String(preamp))
+    audioEngine.applyReplayGain(currentTrackRef.current, preamp, replaygainEnabled)
+  }, [replaygainEnabled])
+
+  const setRenderAlbumArt = useCallback((enabled: boolean) => {
+    setRenderAlbumArtState(enabled)
+    renderAlbumArtRef.current = enabled
+    window.yukinon.settings.set('render_album_art', enabled ? 1 : 0)
+  }, [])
+
+  const setReduceBlur = useCallback((enabled: boolean) => {
+    setReduceBlurState(enabled)
+    window.yukinon.settings.set('reduce_blur', enabled ? 1 : 0)
+    if (enabled) {
+      document.documentElement.classList.add('reduce-blur')
+    } else {
+      document.documentElement.classList.remove('reduce-blur')
+    }
+  }, [])
 
   const notify = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type })
@@ -90,7 +128,9 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     currentTrackId: null,
     position: 0,
     duration: 0,
-    volume: 0.8
+    volume: 0.8,
+    shuffle: false,
+    repeat: 'off'
   })
 
   // Prevent React re-render cascades by keeping a mutable ref of the state
@@ -99,6 +139,28 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     playerStateRef.current = { ...playerStateRef.current, ...state }
     setPlayerState(playerStateRef.current)
   }, [])
+
+  const toggleShuffle = useCallback(() => {
+    setShuffle((prev) => {
+      const next = !prev
+      setPlayer({ shuffle: next })
+      if (activePlayerRef.current === ytmPlayerRef.current) {
+        activePlayerRef.current?.shuffle?.()
+      }
+      return next
+    })
+  }, [setPlayer])
+
+  const toggleRepeat = useCallback(() => {
+    setRepeat((prev) => {
+      const next = prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off'
+      setPlayer({ repeat: next })
+      if (activePlayerRef.current === ytmPlayerRef.current) {
+        activePlayerRef.current?.repeat?.()
+      }
+      return next
+    })
+  }, [setPlayer])
 
   // Apply theme to DOM
   const applyThemeToDOM = useCallback((t: AppTheme) => {
@@ -112,10 +174,13 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     root.classList.add(mode)
     root.style.setProperty('--color-accent', accentColor)
 
-    const hex = accentColor.replace('#', '')
-    const r = parseInt(hex.substring(0, 2), 16)
-    const g = parseInt(hex.substring(2, 4), 16)
-    const b = parseInt(hex.substring(4, 6), 16)
+    let hex = accentColor.replace('#', '')
+    if (hex.length === 3) {
+      hex = hex.split('').map((c) => c + c).join('')
+    }
+    const r = parseInt(hex.substring(0, 2), 16) || 59
+    const g = parseInt(hex.substring(2, 4), 16) || 130
+    const b = parseInt(hex.substring(4, 6), 16) || 246
     root.style.setProperty('--color-accent-rgb', `${r}, ${g}, ${b}`)
     root.style.setProperty('--color-accent-2', accent2Color)
   }, [])
@@ -144,9 +209,13 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       activePlayerRef.current = localPlayerRef.current
       setPlayer({ source: 'local' })
       await localPlayerRef.current?.play(track)
-      yukinon.library.getTrackArtwork(track.id).then((artwork: any) => {
-        setPlayer({ artwork })
-      })
+      if (renderAlbumArtRef.current) {
+        yukinon.library.getTrackArtwork(track.id).then((artwork: any) => {
+          setPlayer({ artwork })
+        })
+      } else {
+        setPlayer({ artwork: null })
+      }
     } else if (track.source === 'radio') {
       activePlayerRef.current = radioPlayerRef.current
       setPlayer({ source: 'radio' })
@@ -162,6 +231,18 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     }
 
     activePlayerRef.current?.setVolume(playerStateRef.current.volume)
+    currentTrackRef.current = track
+    audioEngine.applyReplayGain(track, replaygainPreamp, replaygainEnabled)
+  }, [setPlayer, replaygainPreamp, replaygainEnabled])
+
+  const seekTo = useCallback((position: number) => {
+    activePlayerRef.current?.seek(position)
+    setPlayer({ position })
+  }, [setPlayer])
+
+  const setVolume = useCallback((volume: number) => {
+    activePlayerRef.current?.setVolume(volume)
+    setPlayer({ volume })
   }, [setPlayer])
 
   const playNextRef = useRef<() => void>()
@@ -172,10 +253,21 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     }
 
     if (queue.length > 0) {
+      if (repeat === 'one') {
+        seekTo(0)
+        play(queue[currentQueueIndex])
+        return
+      }
+
       let nextIndex = currentQueueIndex
 
-      if (playbackMode === 'repeat-one') {
-        // Just play the exact same index again
+      if (shuffle) {
+        if (queue.length > 1) {
+          const r = Math.floor(Math.random() * (queue.length - 1))
+          nextIndex = r >= currentQueueIndex ? r + 1 : r
+        } else {
+          nextIndex = 0
+        }
       } else if (isSmartPlay) {
         const candidates = queue.map((t, i) => {
           let score = 1
@@ -192,21 +284,21 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
             break
           }
         }
-      } else if (playbackMode === 'shuffle') {
-        nextIndex = Math.floor(Math.random() * queue.length)
+      } else if (repeat === 'all') {
+        nextIndex = (currentQueueIndex + 1) % queue.length
       } else {
-        if (currentQueueIndex + 1 >= queue.length && playbackMode === 'normal') {
+        if (currentQueueIndex + 1 >= queue.length) {
           activePlayerRef.current?.pause()
           setPlayer({ status: 'stopped', position: 0 })
           return
         }
-        nextIndex = (currentQueueIndex + 1) % queue.length
+        nextIndex = currentQueueIndex + 1
       }
 
       setCurrentQueueIndex(nextIndex)
       play(queue[nextIndex])
     }
-  }, [queue, currentQueueIndex, playbackMode, isSmartPlay, play, setPlayer])
+  }, [queue, currentQueueIndex, repeat, shuffle, isSmartPlay, play, seekTo, setPlayer])
   
   // Keep ref up to date
   useEffect(() => { playNextRef.current = playNext }, [playNext])
@@ -218,11 +310,24 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     }
 
     if (queue.length > 0) {
-      const prevIndex = (currentQueueIndex - 1 + queue.length) % queue.length
+      if (repeat === 'one') {
+        seekTo(0)
+        play(queue[currentQueueIndex])
+        return
+      }
+
+      let prevIndex = currentQueueIndex - 1
+      if (prevIndex < 0) {
+        if (repeat === 'all') {
+          prevIndex = queue.length - 1
+        } else {
+          prevIndex = 0
+        }
+      }
       setCurrentQueueIndex(prevIndex)
       play(queue[prevIndex])
     }
-  }, [queue, currentQueueIndex, play])
+  }, [queue, currentQueueIndex, repeat, play, seekTo])
 
   const togglePlayPause = useCallback(() => {
     if (activePlayerRef.current) {
@@ -241,16 +346,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     }
   }, [])
 
-  const seekTo = useCallback((position: number) => {
-    activePlayerRef.current?.seek(position)
-    setPlayer({ position })
-  }, [setPlayer])
-
-  const setVolume = useCallback((volume: number) => {
-    activePlayerRef.current?.setVolume(volume)
-    setPlayer({ volume })
-  }, [setPlayer])
-
   const setQueue = useCallback(
     (newQueue: Track[], startIndex = 0) => {
       setQueueState(newQueue)
@@ -262,24 +357,51 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     [play]
   )
 
+  const playNextTrack = useCallback((track: Track) => {
+    if (queue.length === 0) {
+      setQueue([track], 0)
+    } else {
+      setQueueState((prev) => {
+        const nextQueue = [...prev]
+        nextQueue.splice(currentQueueIndex + 1, 0, track)
+        return nextQueue
+      })
+    }
+  }, [queue.length, currentQueueIndex, setQueue])
+
   const addToQueue = useCallback((track: Track) => {
-    setQueueState((prev) => [...prev, track])
-  }, [])
+    if (queue.length === 0) {
+      setQueue([track], 0)
+    } else {
+      setQueueState((prev) => [...prev, track])
+    }
+  }, [queue.length, setQueue])
+
+  const clearQueue = useCallback(() => {
+    if (playerStateRef.current.status === 'playing' && queue[currentQueueIndex]) {
+      setQueueState([queue[currentQueueIndex]])
+      setCurrentQueueIndex(0)
+    } else {
+      activePlayerRef.current?.pause()
+      setQueueState([])
+      setCurrentQueueIndex(0)
+      setPlayer({ status: 'stopped', currentTrackId: null, position: 0 })
+    }
+  }, [queue, currentQueueIndex, setPlayer])
 
   const removeFromQueue = useCallback((index: number) => {
     setQueueState((prev) => {
       const newQueue = [...prev]
       newQueue.splice(index, 1)
-      return newQueue
-    })
-    setCurrentQueueIndex((prevIdx) => {
-      if (index < prevIdx) return prevIdx - 1
-      if (index === prevIdx) {
-        // If we removed the currently playing track, we should probably handle playback stopping or playing next,
-        // but for now let's just keep it at the same index so it plays the next track in the queue naturally.
+
+      setCurrentQueueIndex((prevIdx) => {
+        if (newQueue.length === 0) return 0
+        if (index < prevIdx) return prevIdx - 1
+        if (prevIdx >= newQueue.length) return newQueue.length - 1
         return prevIdx
-      }
-      return prevIdx
+      })
+
+      return newQueue
     })
   }, [])
 
@@ -351,6 +473,36 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
 
     yukinon.settings.get('active_modules').then((m: any) => {
       if (m) setActiveModulesState(m)
+    })
+
+    yukinon.settings.get('render_album_art').then((val: any) => {
+      if (val !== null && val !== undefined) {
+        const enabled = val !== 0 && val !== false && val !== '0'
+        setRenderAlbumArtState(enabled)
+        renderAlbumArtRef.current = enabled
+      }
+    })
+
+    yukinon.settings.get('reduce_blur').then((val: any) => {
+      if (val !== null && val !== undefined) {
+        const enabled = val === 1 || val === true || val === '1'
+        setReduceBlurState(enabled)
+        if (enabled) {
+          document.documentElement.classList.add('reduce-blur')
+        }
+      }
+    })
+
+    yukinon.settings.get('replaygain_enabled').then((val: any) => {
+      if (val !== null && val !== undefined) {
+        setReplaygainEnabledState(val === true || val === 'true' || val === 1 || val === '1')
+      }
+    })
+
+    yukinon.settings.get('replaygain_preamp').then((val: any) => {
+      if (val !== null && val !== undefined) {
+        setReplaygainPreampState(Number(val) || 0)
+      }
     })
 
     yukinon.library.getTracks().then(setTracks)
@@ -498,8 +650,14 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         queue,
         setQueue,
         addToQueue,
+        playNextTrack,
+        clearQueue,
         removeFromQueue,
         currentQueueIndex,
+        shuffle,
+        repeat,
+        toggleShuffle,
+        toggleRepeat,
         playbackMode,
         togglePlaybackMode: () => {
           setPlaybackMode((prev) => {
@@ -525,6 +683,14 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         activeView, setActiveView,
         activeModules,
         setActiveModules,
+        renderAlbumArt,
+        setRenderAlbumArt,
+        reduceBlur,
+        setReduceBlur,
+        replaygainEnabled,
+        setReplayGainEnabled,
+        replaygainPreamp,
+        setReplayGainPreamp,
         notification,
         notify,
         confirm

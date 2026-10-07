@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Moon, Sun, Palette, FolderOpen, Trash2, Info, RefreshCw, Copy, ShieldCheck, Blocks, Layers, Keyboard, Music2 } from 'lucide-react'
+import { Moon, Sun, Palette, FolderOpen, Trash2, Info, RefreshCw, Copy, ShieldCheck, Blocks, Layers, Keyboard, Music2, Sparkles } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 
 const ACCENT_PRESETS = [
@@ -14,7 +14,24 @@ const ACCENT_PRESETS = [
 ]
 
 export default function SettingsView(): React.ReactElement {
-  const { theme, setTheme, setTracks, activeModules, setActiveModules, activeView, setActiveView, confirm } = useApp()
+  const {
+    theme,
+    setTheme,
+    setTracks,
+    activeModules,
+    setActiveModules,
+    activeView,
+    setActiveView,
+    confirm,
+    renderAlbumArt,
+    setRenderAlbumArt,
+    reduceBlur,
+    setReduceBlur,
+    replaygainEnabled,
+    setReplayGainEnabled,
+    replaygainPreamp,
+    setReplayGainPreamp
+  } = useApp()
   const [folders, setFolders] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -191,7 +208,7 @@ export default function SettingsView(): React.ReactElement {
     const result = await window.yukinon.library.findDuplicates() as { duplicateCount: number }
     setDuplicateCount(result.duplicateCount)
     if (result.duplicateCount === 0) {
-      setNotification({ message: 'No duplicate tracks found!', type: 'success' })
+      setNotification({ message: 'No duplicate tracks found.', type: 'success' })
       setTimeout(() => setNotification(null), 4000)
     }
   }
@@ -273,15 +290,15 @@ export default function SettingsView(): React.ReactElement {
 
           {/* Accent color */}
           <SettingRow label="Accent Color" description="Primary highlight color used throughout the app">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {ACCENT_PRESETS.map((p) => (
                 <button
                   key={p.color}
                   onClick={() => setTheme({ accentColor: p.color })}
                   title={p.label}
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 36,
+                    height: 36,
                     borderRadius: '50%',
                     background: p.color,
                     border: theme.accentColor === p.color ? '3px solid var(--text)' : '2px solid transparent',
@@ -296,8 +313,8 @@ export default function SettingsView(): React.ReactElement {
               <div style={{ position: 'relative' }}>
                 <div
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 36,
+                    height: 36,
                     borderRadius: '50%',
                     background: `conic-gradient(red, yellow, lime, cyan, blue, magenta, red)`,
                     border: '2px solid var(--border)',
@@ -318,15 +335,15 @@ export default function SettingsView(): React.ReactElement {
 
           {/* Accent 2 (secondary) */}
           <SettingRow label="Secondary Accent" description="Used for EQ curve gradients and highlights">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {ACCENT_PRESETS.slice(4).map((p) => (
                 <button
                   key={p.color}
                   onClick={() => setTheme({ accent2Color: p.color })}
                   title={p.label}
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 36,
+                    height: 36,
                     borderRadius: '50%',
                     background: p.color,
                     border: theme.accent2Color === p.color ? '3px solid var(--text)' : '2px solid transparent',
@@ -339,8 +356,8 @@ export default function SettingsView(): React.ReactElement {
               <div style={{ position: 'relative' }}>
                 <div
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 36,
+                    height: 36,
                     borderRadius: '50%',
                     background: `conic-gradient(red, yellow, lime, cyan, blue, magenta, red)`,
                     border: '2px solid var(--border)',
@@ -362,7 +379,36 @@ export default function SettingsView(): React.ReactElement {
 
         {/* Audio Output */}
         <Section title="Audio Output" icon={<Music2 size={16} />}>
-          <SettingRow label="Preamp Gain" description="Adjust base volume to offset device differences (-5 to +5)">
+          <SettingRow
+            label="Loudness Normalization (ReplayGain / EBU R128)"
+            description="Prevents sudden volume jumps between tracks using studio loudness tags"
+          >
+            <Toggle
+              checked={replaygainEnabled}
+              onChange={() => setReplayGainEnabled(!replaygainEnabled)}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Preamp Offset"
+            description={`Adjust reference loudness calibration offset (${replaygainPreamp > 0 ? `+${replaygainPreamp}` : replaygainPreamp} dB)`}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <input
+                type="range"
+                min="-6"
+                max="6"
+                step="0.5"
+                value={replaygainPreamp}
+                disabled={!replaygainEnabled}
+                onChange={(e) => setReplayGainPreamp(Number(e.target.value))}
+                style={{ width: 120, opacity: replaygainEnabled ? 1 : 0.5 }}
+              />
+              <span style={{ fontSize: 12, fontWeight: 600, width: 48, textAlign: 'right', color: 'var(--text)' }}>
+                {replaygainPreamp > 0 ? `+${replaygainPreamp.toFixed(1)}` : `${replaygainPreamp.toFixed(1)}`} dB
+              </span>
+            </div>
+          </SettingRow>
+          <SettingRow label="Hardware Preamp Gain" description="Adjust base volume to offset device differences (-5 to +5)">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <input 
                 type="range" 
@@ -378,6 +424,16 @@ export default function SettingsView(): React.ReactElement {
                 {preamp > 0 ? `+${preamp}` : preamp}
               </span>
             </div>
+          </SettingRow>
+        </Section>
+
+        {/* Performance & Display */}
+        <Section title="Performance & Display" icon={<Sparkles size={16} />}>
+          <SettingRow label="Album Artwork" description="Render album and single cover artwork in players. Disabling saves memory and battery.">
+            <Toggle checked={renderAlbumArt} onChange={() => setRenderAlbumArt(!renderAlbumArt)} />
+          </SettingRow>
+          <SettingRow label="Reduce Blur Effects" description="Disable heavy glassmorphism blurs for smoother UI rendering and battery efficiency.">
+            <Toggle checked={reduceBlur} onChange={() => setReduceBlur(!reduceBlur)} />
           </SettingRow>
         </Section>
 
@@ -609,7 +665,7 @@ export default function SettingsView(): React.ReactElement {
                 rel="noreferrer"
                 style={{ color: 'var(--color-accent)', textDecoration: 'none' }}
               >
-                View on GitHub →
+                View on GitHub
               </a>
             </p>
             <p style={{ marginTop: 4, fontSize: 11, color: 'var(--text-dim)', opacity: 0.7 }}>
@@ -675,6 +731,7 @@ function ModeBtn({ active, onClick, icon, label }: { active: boolean; onClick: (
         alignItems: 'center',
         gap: 5,
         padding: '7px 14px',
+        minHeight: 44,
         fontSize: 12,
         fontWeight: 500,
         border: 'none',

@@ -26,10 +26,10 @@ function getArtist(player: any, currentTrack: any) {
 }
 
 export default function NowPlaying(): React.ReactElement {
-  const { player, tracks, togglePlayPause, playNext, playPrev, seekTo, playbackMode, togglePlaybackMode, setActiveView } = useApp()
+  const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, shuffle, repeat, toggleShuffle, toggleRepeat, setActiveView, renderAlbumArt } = useApp()
   const [dragPosition, setDragPosition] = useState<number | null>(null)
 
-  const currentTrack = tracks.find(t => t.id === player.currentTrackId)
+  const currentTrack = tracks.find(t => t.id === player.currentTrackId) || queue.find(t => t.id === player.currentTrackId)
 
   const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setDragPosition(Number(e.target.value))
@@ -46,29 +46,28 @@ export default function NowPlaying(): React.ReactElement {
     ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100
     : 0
 
-  const PlayIcon = playbackMode === 'shuffle' ? Shuffle : playbackMode === 'repeat-all' ? Repeat : playbackMode === 'repeat-one' ? Repeat1 : Repeat
-
   return (
     <div
-      className="glass"
       style={{
         position: 'fixed',
-        bottom: 64, // sits above 64px bottom tab bar
-        left: 8,
-        right: 8,
-        height: 72,
-        borderRadius: 20,
+        bottom: 68, // sits above 68px bottom tab bar
+        left: 0,
+        right: 0,
+        height: 64,
+        borderRadius: 0,
+        background: 'var(--bg-2)',
+        borderTop: '1px solid var(--border)',
+        boxShadow: '0 -2px 8px rgba(0,0,0,0.2)',
         zIndex: 50,
         overflow: 'hidden',
         display: 'flex',
         alignItems: 'center',
         padding: '0 12px',
         gap: 8,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
       }}
     >
-      {/* Progress bar - absolutely at bottom */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3 }}>
+      {/* Progress bar - top edge with 24px touch-friendly hit area */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 24, zIndex: 10, cursor: 'pointer' }}>
         <input
           type="range"
           min={0}
@@ -78,16 +77,36 @@ export default function NowPlaying(): React.ReactElement {
           onChange={handleSeekChange}
           onTouchEnd={handleSeekEnd}
           onMouseUp={handleSeekEnd}
-          style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', zIndex: 1 }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 24,
+            margin: 0,
+            opacity: 0,
+            width: '100%',
+            cursor: 'pointer',
+            zIndex: 2
+          }}
         />
         <div style={{
-          height: '100%',
-          background: 'linear-gradient(90deg, var(--color-accent), var(--color-accent-2))',
-          transform: `scaleX(${progressPercent / 100})`,
-          transformOrigin: 'left',
-          transition: 'transform 0.3s linear',
-          borderRadius: 100,
-        }} />
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: 'var(--border)'
+        }}>
+          <div style={{
+            height: '100%',
+            background: 'linear-gradient(90deg, var(--color-accent), var(--color-accent-2))',
+            transform: `scaleX(${progressPercent / 100})`,
+            transformOrigin: 'left',
+            transition: 'transform 0.3s linear',
+            borderRadius: 100,
+          }} />
+        </div>
       </div>
 
       {/* Artwork + tap for fullscreen */}
@@ -107,7 +126,7 @@ export default function NowPlaying(): React.ReactElement {
           cursor: 'pointer',
         }}
       >
-        {player.artwork
+        {renderAlbumArt && player.artwork
           ? <img src={player.artwork} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Music2 size={18} style={{ color: 'var(--text-dim)' }} />
         }
@@ -150,8 +169,8 @@ export default function NowPlaying(): React.ReactElement {
       <button
         onClick={togglePlayPause}
         style={{
-          width: 44,
-          height: 44,
+          width: 48,
+          height: 48,
           borderRadius: '50%',
           background: 'var(--color-accent)',
           border: 'none',
@@ -172,10 +191,19 @@ export default function NowPlaying(): React.ReactElement {
       </button>
 
       <button
-        onClick={togglePlaybackMode}
-        style={{ ...btnStyle, color: playbackMode !== 'normal' ? 'var(--color-accent)' : 'var(--text-dim)' }}
+        onClick={toggleShuffle}
+        title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'}
+        style={{ ...btnStyle, color: shuffle ? 'var(--color-accent)' : 'var(--text-dim)' }}
       >
-        <PlayIcon size={16} />
+        <Shuffle size={18} />
+      </button>
+
+      <button
+        onClick={toggleRepeat}
+        title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`}
+        style={{ ...btnStyle, color: repeat !== 'off' ? 'var(--color-accent)' : 'var(--text-dim)' }}
+      >
+        {repeat === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
       </button>
     </div>
   )
@@ -186,12 +214,12 @@ const btnStyle: React.CSSProperties = {
   border: 'none',
   color: 'var(--text-dim)',
   cursor: 'pointer',
-  padding: 8,
+  padding: 10,
   borderRadius: '50%',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   flexShrink: 0,
-  minWidth: 36,
-  minHeight: 36,
+  minWidth: 44,
+  minHeight: 44,
 }

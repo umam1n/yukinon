@@ -1,4 +1,20 @@
-import type { EQBands } from '@shared/types'
+import type { EQBands, Track } from '@shared/types'
+
+export function calculateReplayGainTarget(
+  track: Pick<Track, 'replaygainTrackGain' | 'replaygainTrackPeak'> | null | undefined,
+  preampOffset = 0,
+  enabled = true
+): number {
+  if (!enabled || !track || track.replaygainTrackGain === undefined || track.replaygainTrackGain === null) {
+    return 0
+  }
+  let targetGain = (track.replaygainTrackGain ?? 0) + preampOffset
+  if (track.replaygainTrackPeak && track.replaygainTrackPeak > 0) {
+    const maxGainDb = -20 * Math.log10(track.replaygainTrackPeak)
+    targetGain = Math.min(targetGain, maxGainDb)
+  }
+  return targetGain
+}
 
 const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const
 
@@ -20,7 +36,8 @@ class AudioEngine {
   initialize(): AudioContext {
     if (this.ctx) return this.ctx
 
-    this.ctx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 })
+    const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    this.ctx = new AudioCtxClass({ latencyHint: 'playback' })
 
     // Create 10-band EQ filter chain
     this.filters = EQ_FREQUENCIES.map((freq) => {
@@ -66,11 +83,12 @@ class AudioEngine {
   }
 
   setGain(bandIndex: number, gainDb: number): void {
-    if (!this.filters[bandIndex]) return
-    this.filters[bandIndex].gain.setTargetAtTime(gainDb, this.ctx!.currentTime, 0.01)
+    if (!this.filters[bandIndex] || !this.ctx) return
+    this.filters[bandIndex].gain.setTargetAtTime(gainDb, this.ctx.currentTime, 0.01)
   }
 
   applyBands(bands: EQBands): void {
+    if (!bands || !this.ctx) return
     const freqs = Object.keys(bands).map(Number).sort((a, b) => a - b)
     freqs.forEach((freq, i) => {
       if (this.filters[i]) {
@@ -80,27 +98,40 @@ class AudioEngine {
   }
 
   setVolume(volume: number): void {
-    if (!this.masterGain) return
-    this.masterGain.gain.setTargetAtTime(volume, this.ctx!.currentTime, 0.02)
+    if (!this.masterGain || !this.ctx) return
+    const clamped = Math.max(0, Math.min(1, volume))
+    this.masterGain.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.02)
   }
 
   setPreampGain(dbValue: number): void {
-    if (!this.preampGain) return
+    if (!this.preampGain || !this.ctx) return
     // Convert dB to linear multiplier: 10^(db/20)
     // +5dB = 1.77x, -5dB = 0.56x
     const multiplier = Math.pow(10, dbValue / 20)
-    this.preampGain.gain.setTargetAtTime(multiplier, this.ctx!.currentTime, 0.05)
+    this.preampGain.gain.setTargetAtTime(multiplier, this.ctx.currentTime, 0.05)
+  }
+
+  applyReplayGain(
+    track: Pick<Track, 'replaygainTrackGain' | 'replaygainTrackPeak'> | null | undefined,
+    preampOffset = 0,
+    enabled = true
+  ): void {
+    const targetGain = calculateReplayGainTarget(track, preampOffset, enabled)
+    this.setPreampGain(targetGain)
   }
 
   suspend(): void {
-    if (this.ctx && this.ctx.state === 'running') {
-      this.ctx.suspend().catch(console.error)
-    }
+    // Keep AudioContext warm across pauses to avoid buffer underruns and clock desync.
+    // An idle AudioContext consumes negligible CPU when HTMLAudioElement is not feeding samples.
   }
 
-  resume(): void {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(console.error)
+  async resume(): Promise<void> {
+    if (this.ctx && (this.ctx.state === 'suspended' || (this.ctx.state as string) === 'interrupted')) {
+      try {
+        await this.ctx.resume()
+      } catch (err) {
+        console.error('[AudioEngine] Failed to resume audio context:', err)
+      }
     }
   }
 

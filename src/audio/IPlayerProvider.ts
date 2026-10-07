@@ -6,7 +6,7 @@ export interface IPlayerProvider {
   /** Pause playback */
   pause(): void
   /** Resume playback */
-  resume(): void
+  resume(): void | Promise<void>
   /** Seek to a specific position in seconds */
   seek(position: number): void
   /** Set volume (0.0 to 1.0) */

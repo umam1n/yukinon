@@ -13,9 +13,26 @@ import SubsonicView from './components/Subsonic/SubsonicView'
 import JellyfinView from './components/Jellyfin/JellyfinView'
 import { useApp } from './store/AppContext'
 import FullscreenPlayer from './components/FullscreenPlayer'
+import { App as CapApp } from '@capacitor/app'
 
 function AppInner(): React.ReactElement {
-  const { activeView, notification } = useApp()
+  const { activeView, setActiveView, notification } = useApp()
+
+  useEffect(() => {
+    const handler = CapApp.addListener('backButton', () => {
+      if (activeView === 'fullscreen') {
+        setActiveView('library')
+      } else if (activeView !== 'library') {
+        setActiveView('library')
+      } else {
+        CapApp.exitApp()
+      }
+    })
+
+    return () => {
+      handler.then(h => h.remove())
+    }
+  }, [activeView, setActiveView])
 
   return (
     <div style={{ height: '100vh', background: 'var(--bg)', color: 'var(--text)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -44,8 +61,8 @@ function AppInner(): React.ReactElement {
       <main style={{
         flex: 1,
         overflow: 'hidden',
-        // bottom: 64px tab + 80px player = 144px; give a bit extra
-        paddingBottom: activeView === 'fullscreen' ? 0 : 148,
+        // bottom: 68px tab + 64px player = 132px
+        paddingBottom: activeView === 'fullscreen' ? 0 : 132,
       }}>
         {activeView === 'library'    && <LibraryView />}
         {activeView === 'playlists'  && <PlaylistsView />}

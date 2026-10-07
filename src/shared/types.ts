@@ -2,6 +2,8 @@
 
 export type TrackSource = 'local' | 'ytm' | 'radio' | 'subsonic' | 'jellyfin'
 
+export type ContentType = 'music' | 'instrumental' | 'live' | 'asmr' | 'podcast' | 'soundtrack'
+
 export interface Track {
   id: string
   source: TrackSource
@@ -21,13 +23,33 @@ export interface Track {
   bitrate?: number
   playCount?: number
   isFavorite?: boolean
+  contentType?: ContentType
+  isInstrumental?: boolean
+  isLive?: boolean
+  mood?: string
+  aiTags?: string[]
+  replaygainTrackGain?: number | null
+  replaygainTrackPeak?: number | null
+}
+
+export type PlaylistType = 'static' | 'smart'
+
+export interface SmartPlaylistRule {
+  field: 'content_type' | 'mood' | 'genre' | 'is_instrumental' | 'is_live' | 'year' | 'bitrate' | 'play_count' | 'artist' | 'album'
+  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'in'
+  value: string | number | boolean | string[]
 }
 
 export interface Playlist {
   id: string
   name: string
-  trackIds: string[]
+  trackIds?: string[]
   createdAt: string
+  type?: PlaylistType
+  ruleJson?: string
+  sqlFilter?: string
+  icon?: string
+  trackCount?: number
 }
 
 export interface EQBands {
@@ -87,6 +109,8 @@ export interface PlayerState {
   radioInfo?: { title: string; station: string }
   subsonicInfo?: { title: string; artist: string }
   jellyfinInfo?: { title: string; artist: string }
+  shuffle: boolean
+  repeat: 'off' | 'all' | 'one'
 }
 
 export type IpcChannels =

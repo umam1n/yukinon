@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react'
-import { RotateCcw, Save, Check } from 'lucide-react'
+import React, { useState, useCallback, useMemo } from 'react'
+import { RotateCcw, Save, Check, Headphones, Search, X } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 import DeviceProfiles from './DeviceProfiles'
 import type { EQBands } from '@shared/types'
+import { AUTOEQ_PROFILES, type AutoEQProfile } from '../../data/autoeq'
+import { audioEngine } from '../../audio/AudioEngine'
 
 const EQ_BANDS: { freq: number; label: string }[] = [
   { freq: 32, label: '32Hz' },
@@ -25,6 +27,39 @@ export default function EQPanel(): React.ReactElement {
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [justSaved, setJustSaved] = useState(false)
+
+  const [autoEqModalOpen, setAutoEqModalOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedBrand, setSelectedBrand] = useState('all')
+
+  const brands = useMemo(() => {
+    const bSet = new Set(AUTOEQ_PROFILES.map((p) => p.brand))
+    return ['all', ...Array.from(bSet)]
+  }, [])
+
+  const filteredAutoEq = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+    return AUTOEQ_PROFILES.filter((p) => {
+      const matchesBrand = selectedBrand === 'all' || p.brand === selectedBrand
+      const matchesQuery =
+        !q ||
+        p.brand.toLowerCase().includes(q) ||
+        p.model.toLowerCase().includes(q) ||
+        p.name.toLowerCase().includes(q)
+      return matchesBrand && matchesQuery
+    })
+  }, [searchQuery, selectedBrand])
+
+  const handleApplyAutoEQ = useCallback(
+    (profile: AutoEQProfile) => {
+      Object.entries(profile.bands).forEach(([band, gain]) => {
+        setEqBand(Number(band) as keyof EQBands, gain)
+      })
+      audioEngine.applyBands(profile.bands)
+      setAutoEqModalOpen(false)
+    },
+    [setEqBand]
+  )
 
   const handleReset = useCallback(() => {
     const flat: EQBands = { 32: 0, 64: 0, 125: 0, 250: 0, 500: 0, 1000: 0, 2000: 0, 4000: 0, 8000: 0, 16000: 0 }
@@ -73,10 +108,18 @@ export default function EQPanel(): React.ReactElement {
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Equalizer</h2>
           <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-            10-band parametric EQ · changes apply in real-time
+            10-band EQ · changes apply in real-time
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => setAutoEqModalOpen(true)}
+            style={btnStyle('secondary')}
+            title="Browse AutoEQ headphone calibration database"
+          >
+            <Headphones size={14} />
+            AutoEQ Presets
+          </button>
           <button
             onClick={handleReset}
             style={btnStyle('secondary')}
@@ -90,7 +133,7 @@ export default function EQPanel(): React.ReactElement {
             style={btnStyle('primary')}
           >
             {justSaved ? <Check size={14} /> : <Save size={14} />}
-            {justSaved ? 'Saved!' : 'Save Preset'}
+            {justSaved ? 'Preset saved' : 'Save Preset'}
           </button>
         </div>
       </div>
@@ -276,6 +319,185 @@ export default function EQPanel(): React.ReactElement {
               <button onClick={handleSave} style={btnStyle('primary')}>
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AutoEQ Headphone Calibration Modal */}
+      {autoEqModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(4px)',
+            padding: 24
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAutoEqModalOpen(false)
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 24,
+              width: 580,
+              maxWidth: '100%',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.4)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
+                  AutoEQ Headphone Calibration
+                </h3>
+                <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
+                  Calibrated Harman target compensation curves from Jaakko Pasanen's AutoEq database
+                </p>
+              </div>
+              <button
+                onClick={() => setAutoEqModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer',
+                  padding: 4
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'var(--bg-3)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginBottom: 12
+              }}
+            >
+              <Search size={16} color="var(--text-dim)" />
+              <input
+                type="text"
+                placeholder="Search headphone brand or model (e.g. HD 600, XM4, AirPods)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--text)',
+                  fontSize: 13,
+                  width: '100%'
+                }}
+                autoFocus
+              />
+            </div>
+
+            {/* Brand Filter Pills */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                overflowX: 'auto',
+                paddingBottom: 8,
+                marginBottom: 12,
+                flexShrink: 0
+              }}
+            >
+              {brands.map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setSelectedBrand(b)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 14,
+                    fontSize: 11,
+                    fontWeight: selectedBrand === b ? 600 : 500,
+                    border: '1px solid var(--border)',
+                    background: selectedBrand === b ? 'var(--color-accent)' : 'var(--bg-3)',
+                    color: selectedBrand === b ? '#fff' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {b === 'all' ? 'All Brands' : b}
+                </button>
+              ))}
+            </div>
+
+            {/* Results List */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                minHeight: 200,
+                maxHeight: 400
+              }}
+            >
+              {filteredAutoEq.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-dim)', fontSize: 13 }}>
+                  No matching headphone models found.
+                </div>
+              ) : (
+                filteredAutoEq.map((profile) => (
+                  <div
+                    key={`${profile.brand}-${profile.model}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      background: 'var(--bg-3)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                        {profile.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+                        {profile.source}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleApplyAutoEQ(profile)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: 'var(--color-accent)',
+                        color: '#fff',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Apply Calibration
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useApp } from '../../store/AppContext'
-import { Music2, PlusCircle } from 'lucide-react'
+import { Music2, PlusCircle, ListPlus, ListEnd } from 'lucide-react'
 import type { Track } from '@shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
+import { calculateVirtualWindow } from '../../lib/virtualList'
 
 function formatDuration(secs: number): string {
   if (!secs) return ''
@@ -11,15 +12,63 @@ function formatDuration(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+const ROW_HEIGHT = 58
+const OVERSCAN = 12
+
 export default function TrackList({ tracks, isQueueView }: { tracks: Track[], isQueueView?: boolean }): React.ReactElement {
-  const { setQueue, player, removeFromQueue } = useApp()
-  const [trackToPlaylist, setTrackToPlaylist] = React.useState<Track | null>(null)
+  const { setQueue, player, removeFromQueue, playNextTrack, addToQueue } = useApp()
+  const [trackToPlaylist, setTrackToPlaylist] = useState<Track | null>(null)
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(600)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    setViewportHeight(el.clientHeight || 600)
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.height > 0) {
+          setViewportHeight(entry.contentRect.height)
+        }
+      }
+    })
+    resizeObserver.observe(el)
+
+    return () => resizeObserver.disconnect()
+  }, [])
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
+
+  const { startIndex, endIndex, paddingTop, paddingBottom } = calculateVirtualWindow(
+    scrollTop,
+    viewportHeight,
+    tracks.length,
+    ROW_HEIGHT,
+    OVERSCAN
+  )
+
+  const visibleTracks = tracks.slice(startIndex, endIndex)
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-      {/* Header row */}
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      style={{ flex: 1, overflowY: 'auto', padding: '0 0 8px 0', position: 'relative' }}
+    >
+      {/* Sticky header row */}
       <div
         style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          background: 'var(--bg)',
           display: 'grid',
           gridTemplateColumns: '40px 1fr auto',
           gap: 12,
@@ -38,14 +87,21 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
         <span></span>
       </div>
 
-      {tracks.map((track, i) => {
+      {/* Top virtual spacer */}
+      {paddingTop > 0 && <div style={{ height: paddingTop }} />}
+
+      {/* Visible sliced items */}
+      {visibleTracks.map((track, sliceIndex) => {
+        const i = startIndex + sliceIndex
         const isPlaying = player.currentTrackId === track.id && player.status === 'playing'
         const isActive = player.currentTrackId === track.id
+        const isSelected = selectedTrackId === track.id
 
         return (
           <div
-            key={track.id}
-            onClick={() => setQueue(tracks, i)}
+            key={`${track.id}-${i}`}
+            onClick={() => setSelectedTrackId(track.id)}
+            onDoubleClick={() => setQueue(tracks, i)}
             style={{
               display: 'grid',
               gridTemplateColumns: '40px 1fr auto',
@@ -55,8 +111,14 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
               cursor: 'pointer',
               borderRadius: 10,
               margin: '1px 8px',
-              background: isActive ? 'rgba(var(--color-accent-rgb), 0.1)' : 'transparent',
-              minHeight: 56,
+              background: isActive
+                ? 'rgba(var(--color-accent-rgb), 0.12)'
+                : isSelected
+                ? 'rgba(var(--color-accent-rgb), 0.06)'
+                : 'transparent',
+              outline: isSelected && !isActive ? '1px solid rgba(var(--color-accent-rgb), 0.3)' : 'none',
+              height: 56,
+              boxSizing: 'border-box'
             }}
           >
             {/* Index / Playing indicator */}
@@ -93,21 +155,37 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
               </div>
             </div>
 
-            {/* Right: duration + playlist button */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* Right: duration + actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'JetBrains Mono, monospace' }}>
                 {formatDuration(track.duration || 0)}
               </span>
               <button
+                onClick={(e) => { e.stopPropagation(); playNextTrack(track) }}
+                title="Play Next"
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ListPlus size={16} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); addToQueue(track) }}
+                title="Add to Queue"
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ListEnd size={16} />
+              </button>
+              <button
                 onClick={(e) => { e.stopPropagation(); setTrackToPlaylist(track) }}
-                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}
+                title="Add to Playlist"
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <PlusCircle size={16} />
               </button>
               {isQueueView && (
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFromQueue(i) }}
-                  style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}
+                  title="Remove from Queue"
+                  style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
@@ -116,7 +194,10 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
           </div>
         )
       })}
-      
+
+      {/* Bottom virtual spacer */}
+      {paddingBottom > 0 && <div style={{ height: paddingBottom }} />}
+
       <AddToPlaylistModal track={trackToPlaylist} onClose={() => setTrackToPlaylist(null)} />
     </div>
   )

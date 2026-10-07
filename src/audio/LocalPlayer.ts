@@ -12,8 +12,16 @@ export class LocalPlayer implements IPlayerProvider {
   constructor() {
     this.audioEl = new Audio()
     this.audioEl.crossOrigin = 'anonymous'
-    this.audioEl.preload = 'metadata'
+    this.audioEl.preload = 'auto'
     audioEngine.initialize()
+
+    this.audioEl.onwaiting = () => {
+      audioEngine.resume()
+    }
+
+    this.audioEl.onstalled = () => {
+      audioEngine.resume()
+    }
 
     this.audioEl.ontimeupdate = () => {
       if (!this.audioEl) return
@@ -87,11 +95,14 @@ export class LocalPlayer implements IPlayerProvider {
       })
     }
     
-    audioEngine.resume()
+    await audioEngine.resume()
     try {
       await this.audioEl.play()
       this.emit({ status: 'playing' })
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        return
+      }
       console.error('[LocalPlayer] Failed to play local file:', err)
       this.emit({ status: 'stopped' })
     }
@@ -100,16 +111,20 @@ export class LocalPlayer implements IPlayerProvider {
   pause(): void {
     if (this.audioEl) {
       this.audioEl.pause()
-      audioEngine.suspend()
       this.emit({ status: 'paused' })
     }
   }
 
-  resume(): void {
-    audioEngine.resume()
+  async resume(): Promise<void> {
+    await audioEngine.resume()
     if (this.audioEl) {
-      this.audioEl.play()
-      this.emit({ status: 'playing' })
+      try {
+        await this.audioEl.play()
+        this.emit({ status: 'playing' })
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return
+        console.error('[LocalPlayer] Failed to resume local playback:', err)
+      }
     }
   }
 

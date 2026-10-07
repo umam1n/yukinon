@@ -113,7 +113,7 @@ export default function DeviceProfiles(): React.ReactElement {
           }}
         >
           {justSaved ? <Check size={13} /> : null}
-          {justSaved ? 'EQ Saved!' : 'Save EQ for This Device'}
+          {justSaved ? 'Profile saved' : 'Save EQ for This Device'}
         </button>
       </div>
 
