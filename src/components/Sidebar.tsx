@@ -25,6 +25,17 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Sidebar(): React.ReactElement {
   const { activeView, setActiveView } = useApp()
+  const [windowHeight, setWindowHeight] = React.useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 800
+  )
+
+  React.useEffect(() => {
+    const handleResize = () => setWindowHeight(window.innerHeight)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const isCompactHeight = windowHeight < 500
 
   return (
     <nav
@@ -33,14 +44,14 @@ export default function Sidebar(): React.ReactElement {
         bottom: 0,
         left: 0,
         right: 0,
-        height: 68,
+        height: isCompactHeight ? 48 : 68,
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
         background: 'var(--bg-2)',
         borderTop: '1px solid var(--border)',
         zIndex: 100,
-        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)',
+        paddingBottom: isCompactHeight ? '2px' : 'max(env(safe-area-inset-bottom, 0px), 6px)',
         boxSizing: 'border-box'
       }}
     >
@@ -70,7 +81,7 @@ export default function Sidebar(): React.ReactElement {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '4px 18px',
+                padding: isCompactHeight ? '2px 12px' : '4px 18px',
                 borderRadius: 16,
                 background: isActive ? 'rgba(var(--color-accent-rgb), 0.2)' : 'transparent',
                 transition: 'background 0.2s'
@@ -78,16 +89,18 @@ export default function Sidebar(): React.ReactElement {
             >
               {item.icon}
             </div>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: isActive ? 600 : 500,
-                color: isActive ? 'var(--color-accent)' : 'var(--text-dim)',
-                letterSpacing: '0.02em'
-              }}
-            >
-              {item.label}
-            </span>
+            {!isCompactHeight && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? 'var(--color-accent)' : 'var(--text-dim)',
+                  letterSpacing: '0.02em'
+                }}
+              >
+                {item.label}
+              </span>
+            )}
           </button>
         )
       })}

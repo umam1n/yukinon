@@ -48,6 +48,21 @@ export default function FullscreenPlayer(): React.ReactElement {
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false)
   const [isPlainLyrics, setIsPlainLyrics] = useState(false)
   const [dragPosition, setDragPosition] = useState<number | null>(null)
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 360,
+    height: typeof window !== 'undefined' ? window.innerHeight : 640
+  })
+
+  useEffect(() => {
+    const handleResize = () => setDimensions({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const isNarrowOrVertical =
+    dimensions.width < 800 ||
+    dimensions.height > dimensions.width * 1.05 ||
+    dimensions.height < 550
 
   // Mobile swipe gesture tracking
   const touchStartY = useRef<number | null>(null)
@@ -248,9 +263,12 @@ export default function FullscreenPlayer(): React.ReactElement {
         <div
           style={{
             background: 'var(--bg-card)',
-            border: '1px solid var(--border)'
+            border: '1px solid var(--border)',
+            width: isNarrowOrVertical ? 'min(240px, 32vh, 50vw)' : 'min(420px, 40vh)',
+            height: isNarrowOrVertical ? 'min(240px, 32vh, 50vw)' : 'min(420px, 40vh)',
+            borderRadius: isNarrowOrVertical ? 16 : 24
           }}
-          className="w-[min(260px,35vh)] h-[min(260px,35vh)] md:w-[min(420px,40vh)] md:h-[min(420px,40vh)] rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden flex-shrink-0"
+          className="shadow-2xl flex items-center justify-center overflow-hidden flex-shrink-0"
         >
           {renderAlbumArt && artwork ? (
             <img
@@ -280,13 +298,21 @@ export default function FullscreenPlayer(): React.ReactElement {
             {/* Title / Artist */}
             <div className="text-center md:text-left mb-6">
               <h1
-                style={{ color: 'var(--text)' }}
+                style={{
+                  color: 'var(--text)',
+                  fontSize: isNarrowOrVertical ? 'clamp(18px, 4.5vw, 32px)' : undefined,
+                  textAlign: isNarrowOrVertical ? 'center' : undefined
+                }}
                 className="text-2xl md:text-4xl font-extrabold mb-1 line-clamp-2 leading-snug drop-shadow-md"
               >
                 {title}
               </h1>
               <p
-                style={{ color: 'var(--text-muted)' }}
+                style={{
+                  color: 'var(--text-muted)',
+                  fontSize: isNarrowOrVertical ? 'clamp(13px, 3vw, 18px)' : undefined,
+                  textAlign: isNarrowOrVertical ? 'center' : undefined
+                }}
                 className="text-base md:text-xl font-medium"
               >
                 {artist}
@@ -391,28 +417,30 @@ export default function FullscreenPlayer(): React.ReactElement {
             </div>
 
             {/* Volume slider */}
-            <div className="flex items-center gap-4 w-[180px] mx-auto md:mx-0">
-              <button
-                onClick={toggleMute}
-                className="active:scale-90 transition-all"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={isMuted ? 0 : player.volume ?? 0.8}
-                onChange={handleVolume}
-                style={{
-                  accentColor: 'var(--color-accent)',
-                  background: 'var(--border)'
-                }}
-                className="flex-1 h-1 rounded-full cursor-pointer"
-              />
-            </div>
+            {dimensions.height >= 500 && (
+              <div className="flex items-center gap-4 w-[180px] mx-auto md:mx-0">
+                <button
+                  onClick={toggleMute}
+                  className="active:scale-90 transition-all"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={isMuted ? 0 : player.volume ?? 0.8}
+                  onChange={handleVolume}
+                  style={{
+                    accentColor: 'var(--color-accent)',
+                    background: 'var(--border)'
+                  }}
+                  className="flex-1 h-1 rounded-full cursor-pointer"
+                />
+              </div>
+            )}
           </div>
 
           {/* Lyrics View */}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, Music2, ChevronUp } from 'lucide-react'
 import { useApp } from '../store/AppContext'
 
@@ -28,6 +28,16 @@ function getArtist(player: any, currentTrack: any) {
 export default function NowPlaying(): React.ReactElement {
   const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, shuffle, repeat, toggleShuffle, toggleRepeat, setActiveView, renderAlbumArt } = useApp()
   const [dragPosition, setDragPosition] = useState<number | null>(null)
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 360,
+    height: typeof window !== 'undefined' ? window.innerHeight : 640
+  })
+
+  useEffect(() => {
+    const handleResize = () => setDimensions({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const currentTrack = tracks.find(t => t.id === player.currentTrackId) || queue.find(t => t.id === player.currentTrackId)
 
@@ -50,10 +60,10 @@ export default function NowPlaying(): React.ReactElement {
     <div
       style={{
         position: 'fixed',
-        bottom: 68, // sits above 68px bottom tab bar
+        bottom: dimensions.height < 500 ? 48 : 68,
         left: 0,
         right: 0,
-        height: 64,
+        height: dimensions.height < 500 ? 50 : 64,
         borderRadius: 0,
         background: 'var(--bg-2)',
         borderTop: '1px solid var(--border)',
@@ -191,6 +201,7 @@ export default function NowPlaying(): React.ReactElement {
       </button>
 
       <button
+        className="nowplaying-secondary-btn"
         onClick={toggleShuffle}
         title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'}
         style={{ ...btnStyle, color: shuffle ? 'var(--color-accent)' : 'var(--text-dim)' }}
@@ -199,6 +210,7 @@ export default function NowPlaying(): React.ReactElement {
       </button>
 
       <button
+        className="nowplaying-secondary-btn"
         onClick={toggleRepeat}
         title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`}
         style={{ ...btnStyle, color: repeat !== 'off' ? 'var(--color-accent)' : 'var(--text-dim)' }}

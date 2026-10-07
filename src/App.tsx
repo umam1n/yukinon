@@ -17,6 +17,17 @@ import { App as CapApp } from '@capacitor/app'
 
 function AppInner(): React.ReactElement {
   const { activeView, setActiveView, notification } = useApp()
+  const [windowHeight, setWindowHeight] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 800
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowHeight(window.innerHeight)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const isCompactHeight = windowHeight < 500
 
   useEffect(() => {
     const handler = CapApp.addListener('backButton', () => {
@@ -35,7 +46,7 @@ function AppInner(): React.ReactElement {
   }, [activeView, setActiveView])
 
   return (
-    <div style={{ height: '100vh', background: 'var(--bg)', color: 'var(--text)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', minHeight: '100dvh', background: 'var(--bg)', color: 'var(--text)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {/* Toast */}
       {notification && (
@@ -61,8 +72,7 @@ function AppInner(): React.ReactElement {
       <main style={{
         flex: 1,
         overflow: 'hidden',
-        // bottom: 68px tab + 64px player = 132px
-        paddingBottom: activeView === 'fullscreen' ? 0 : 132,
+        paddingBottom: activeView === 'fullscreen' ? 0 : (isCompactHeight ? 84 : 132),
       }}>
         {activeView === 'library'    && <LibraryView />}
         {activeView === 'playlists'  && <PlaylistsView />}

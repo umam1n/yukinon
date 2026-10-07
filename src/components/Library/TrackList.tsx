@@ -22,6 +22,7 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(600)
   const [viewportHeight, setViewportHeight] = useState(600)
 
   useEffect(() => {
@@ -29,11 +30,15 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
     if (!el) return
 
     setViewportHeight(el.clientHeight || 600)
+    setContainerWidth(el.clientWidth || 600)
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.height > 0) {
           setViewportHeight(entry.contentRect.height)
+        }
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width)
         }
       }
     })
@@ -41,6 +46,16 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
 
     return () => resizeObserver.disconnect()
   }, [])
+
+  const layoutMode: 'wide' | 'medium' | 'compact' =
+    containerWidth >= 850 ? 'wide' : containerWidth >= 600 ? 'medium' : 'compact'
+
+  const gridTemplate =
+    layoutMode === 'wide'
+      ? '40px 1fr 1fr 60px auto'
+      : layoutMode === 'medium'
+      ? '40px 1fr 60px auto'
+      : '36px 1fr auto'
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop)
@@ -70,9 +85,9 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
           zIndex: 10,
           background: 'var(--bg)',
           display: 'grid',
-          gridTemplateColumns: '40px 1fr auto',
-          gap: 12,
-          padding: '8px 16px',
+          gridTemplateColumns: gridTemplate,
+          gap: layoutMode === 'compact' ? 8 : 12,
+          padding: layoutMode === 'compact' ? '8px 12px' : '8px 16px',
           fontSize: 11,
           fontWeight: 700,
           color: 'var(--text-dim)',
@@ -84,6 +99,10 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
       >
         <span style={{ textAlign: 'center' }}>#</span>
         <span>Title</span>
+        {layoutMode === 'wide' && <span>Album</span>}
+        {(layoutMode === 'wide' || layoutMode === 'medium') && (
+          <span style={{ textAlign: 'right' }}>Time</span>
+        )}
         <span></span>
       </div>
 
@@ -102,11 +121,12 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
             key={`${track.id}-${i}`}
             onClick={() => setSelectedTrackId(track.id)}
             onDoubleClick={() => setQueue(tracks, i)}
+            className="track-row-compact"
             style={{
               display: 'grid',
-              gridTemplateColumns: '40px 1fr auto',
-              gap: 12,
-              padding: '10px 16px',
+              gridTemplateColumns: gridTemplate,
+              gap: layoutMode === 'compact' ? 8 : 12,
+              padding: layoutMode === 'compact' ? '8px 12px' : '10px 16px',
               alignItems: 'center',
               cursor: 'pointer',
               borderRadius: 10,
@@ -155,29 +175,59 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
               </div>
             </div>
 
-            {/* Right: duration + actions */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'JetBrains Mono, monospace' }}>
+            {/* Wide: Album column */}
+            {layoutMode === 'wide' && (
+              <div style={{
+                fontSize: 13,
+                color: 'var(--text-muted)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0
+              }}>
+                {track.album || '—'}
+              </div>
+            )}
+
+            {/* Wide or Medium: separate duration column */}
+            {(layoutMode === 'wide' || layoutMode === 'medium') && (
+              <div style={{
+                fontSize: 12,
+                color: 'var(--text-dim)',
+                fontFamily: 'JetBrains Mono, monospace',
+                textAlign: 'right'
+              }}>
                 {formatDuration(track.duration || 0)}
-              </span>
+              </div>
+            )}
+
+            {/* Right actions: duration (compact only) + action buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, justifyContent: 'flex-end' }}>
+              {layoutMode === 'compact' && (
+                <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'JetBrains Mono, monospace', marginRight: 4 }}>
+                  {formatDuration(track.duration || 0)}
+                </span>
+              )}
               <button
+                className="nowplaying-secondary-btn"
                 onClick={(e) => { e.stopPropagation(); playNextTrack(track) }}
                 title="Play Next"
-                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 8, minWidth: 36, minHeight: 36, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <ListPlus size={16} />
               </button>
               <button
+                className="nowplaying-secondary-btn"
                 onClick={(e) => { e.stopPropagation(); addToQueue(track) }}
                 title="Add to Queue"
-                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 8, minWidth: 36, minHeight: 36, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <ListEnd size={16} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setTrackToPlaylist(track) }}
                 title="Add to Playlist"
-                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 8, minWidth: 36, minHeight: 36, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <PlusCircle size={16} />
               </button>
@@ -185,7 +235,7 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFromQueue(i) }}
                   title="Remove from Queue"
-                  style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 10, minWidth: 44, minHeight: 44, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 8, minWidth: 36, minHeight: 36, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
