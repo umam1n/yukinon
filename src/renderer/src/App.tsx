@@ -18,8 +18,48 @@ import FullscreenPlayer from './components/FullscreenPlayer'
 
 // Inner app component that has access to context
 function AppInner(): React.ReactElement {
-  const { activeView, notification } = useApp()
+  const { activeView, setActiveView, player, togglePlayPause, seekTo, setVolume, notification } = useApp()
   const showTitleBar = window.yukinon.platform === 'darwin'
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const tagName = target?.tagName?.toUpperCase()
+      const isInput = tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable
+
+      if (e.key === 'Escape') {
+        if (activeView === 'fullscreen') {
+          e.preventDefault()
+          setActiveView('library')
+        }
+        return
+      }
+
+      if (isInput) return
+
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault()
+        togglePlayPause()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        seekTo(Math.max(0, player.position - 5))
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        seekTo(Math.min(player.duration || Infinity, player.position + 5))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        const newVol = Math.min(1, Math.round(((player.volume ?? 0.8) + 0.05) * 100) / 100)
+        setVolume(newVol)
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        const newVol = Math.max(0, Math.round(((player.volume ?? 0.8) - 0.05) * 100) / 100)
+        setVolume(newVol)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeView, setActiveView, togglePlayPause, seekTo, setVolume, player.position, player.duration, player.volume])
 
   return (
     <div
@@ -63,7 +103,7 @@ function AppInner(): React.ReactElement {
         <Sidebar />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-hidden relative" style={{ paddingBottom: activeView === 'fullscreen' ? 0 : 110 }}>
+        <main className="flex-1 overflow-hidden relative" style={{ paddingBottom: activeView === 'fullscreen' ? 0 : 72 }}>
           {activeView === 'library' && <LibraryView />}
           {activeView === 'playlists' && <PlaylistsView />}
           {activeView === 'queue' && <QueueView />}

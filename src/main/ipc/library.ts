@@ -1,11 +1,13 @@
 import { ipcMain as IpcMain, dialog, BrowserWindow, app } from 'electron'
-import { readdir, stat, mkdir, writeFile, readFile } from 'fs/promises'
+import { readdir, mkdir, writeFile, readFile } from 'fs/promises'
 import { join, extname } from 'path'
 import { parseFile } from 'music-metadata'
 import { randomUUID } from 'crypto'
 import { getDb, getSetting, setSetting } from '../db'
 import type { Track } from '../../../shared/types'
 import { existsSync } from 'fs'
+import { classifyTrack } from '../lib/classifier'
+import { clusterDuplicateTracks } from '../lib/duplicates'
 
 const SUPPORTED_FORMATS = new Set(['.flac', '.mp3', '.wav', '.aiff', '.aac', '.ogg', '.m4a', '.opus'])
 
@@ -30,7 +32,9 @@ async function scanDirectory(dirPath: string): Promise<string[]> {
 
 async function indexTrack(filePath: string): Promise<Track | null> {
   try {
-    const metadata = await parseFile(filePath, { duration: true, skipCovers: false })
+    const renderArtSetting = getSetting('render_album_art')
+    const skipCovers = renderArtSetting === 0 || renderArtSetting === false || renderArtSetting === '0'
+    const metadata = await parseFile(filePath, { duration: true, skipCovers })
     const common = metadata.common
     const format = metadata.format
 
@@ -38,7 +42,7 @@ async function indexTrack(filePath: string): Promise<Track | null> {
 
     // Extract artwork and save to disk
     let artworkPath: string | undefined
-    if (common.picture && common.picture.length > 0) {
+    if (!skipCovers && common.picture && common.picture.length > 0) {
       try {
         const artworksDir = join(app.getPath('userData'), 'artworks')
         if (!existsSync(artworksDir)) {
@@ -55,6 +59,26 @@ async function indexTrack(filePath: string): Promise<Track | null> {
       }
     }
 
+    const duration = format.duration || 0
+    const bitrate = format.bitrate ? Math.round(format.bitrate / 1000) : undefined
+
+    // Classify track content type, instrumental, live, and suggested mood
+    const classification = classifyTrack({
+      title: common.title,
+      artist: common.artist,
+      album: common.album,
+      genre: common.genre?.[0],
+      path: filePath,
+      duration,
+      bitrate
+    })
+
+    const replaygainTrackGain = (common as any).replaygain_track_gain?.dB ?? null
+    const replaygainTrackPeak =
+      (common as any).replaygain_track_peak?.ratio ??
+      (format as any).replaygain_track_peak_ratio ??
+      null
+
     const track: Track = {
       id,
       source: 'local',
@@ -65,12 +89,19 @@ async function indexTrack(filePath: string): Promise<Track | null> {
       albumArtist: common.albumartist,
       year: common.year,
       genre: common.genre?.[0],
-      duration: format.duration || 0,
+      duration,
       artwork: artworkPath,
-      format: (extname(filePath).slice(1).toLowerCase()),
+      format: extname(filePath).slice(1).toLowerCase(),
       bitDepth: format.bitsPerSample,
       sampleRate: format.sampleRate,
-      bitrate: format.bitrate ? Math.round(format.bitrate / 1000) : undefined
+      bitrate,
+      contentType: classification.contentType,
+      isInstrumental: classification.isInstrumental,
+      isLive: classification.isLive,
+      mood: classification.suggestedMood,
+      aiTags: [],
+      replaygainTrackGain,
+      replaygainTrackPeak
     }
     return track
   } catch {
@@ -85,19 +116,16 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
   ipc.handle('library:scan', async (_, folderPath: string) => {
     const files = await scanDirectory(folderPath)
     const added: Track[] = []
+    const checkExisting = db.prepare('SELECT id FROM tracks WHERE path = ?')
     const insertStmt = db.prepare(`
       INSERT OR IGNORE INTO tracks
-        (id, path, title, artist, album, album_artist, year, genre, duration, artwork, format, bit_depth, sample_rate, bitrate)
+        (id, path, title, artist, album, album_artist, year, genre, duration, artwork, format, bit_depth, sample_rate, bitrate, content_type, is_instrumental, is_live, mood, ai_tags, replaygain_track_gain, replaygain_track_peak)
       VALUES
-        (@id, @path, @title, @artist, @album, @albumArtist, @year, @genre, @duration, @artwork, @format, @bitDepth, @sampleRate, @bitrate)
+        (@id, @path, @title, @artist, @album, @albumArtist, @year, @genre, @duration, @artwork, @format, @bitDepth, @sampleRate, @bitrate, @contentType, @isInstrumental, @isLive, @mood, @aiTags, @replaygainTrackGain, @replaygainTrackPeak)
     `)
 
-    for (const filePath of files) {
-      const existing = db.prepare('SELECT id FROM tracks WHERE path = ?').get(filePath)
-      if (existing) continue
-
-      const track = await indexTrack(filePath)
-      if (track) {
+    const insertMany = db.transaction((tracksToIndex: Track[]) => {
+      for (const track of tracksToIndex) {
         insertStmt.run({
           id: track.id,
           path: track.path,
@@ -112,10 +140,32 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
           format: track.format,
           bitDepth: track.bitDepth ?? null,
           sampleRate: track.sampleRate ?? null,
-          bitrate: track.bitrate ?? null
+          bitrate: track.bitrate ?? null,
+          contentType: track.contentType || 'music',
+          isInstrumental: track.isInstrumental ? 1 : 0,
+          isLive: track.isLive ? 1 : 0,
+          mood: track.mood ?? null,
+          aiTags: JSON.stringify(track.aiTags || []),
+          replaygainTrackGain: track.replaygainTrackGain ?? null,
+          replaygainTrackPeak: track.replaygainTrackPeak ?? null
         })
-        added.push(track)
       }
+    })
+
+    const newTracks: Track[] = []
+    for (const filePath of files) {
+      const existing = checkExisting.get(filePath)
+      if (existing) continue
+
+      const track = await indexTrack(filePath)
+      if (track) {
+        newTracks.push(track)
+      }
+    }
+
+    if (newTracks.length > 0) {
+      insertMany(newTracks)
+      added.push(...newTracks)
     }
 
     // Save folder path to settings
@@ -132,58 +182,110 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
   ipc.handle('library:getTracks', () => {
     const rows = db.prepare(`
       SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
-             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, play_count as playCount, is_favorite as isFavorite
+             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
+             play_count as playCount, is_favorite as isFavorite,
+             content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
+             mood, ai_tags as aiTags,
+             replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
       FROM tracks
       ORDER BY artist, album, title
-    `).all()
-    return rows as Track[]
+    `).all() as any[]
+
+    return rows.map((r) => ({
+      ...r,
+      isInstrumental: Boolean(r.isInstrumental),
+      isLive: Boolean(r.isLive),
+      aiTags: r.aiTags ? JSON.parse(r.aiTags) : []
+    })) as Track[]
   })
 
   // Get single track (excluding artwork)
   ipc.handle('library:getTrack', (_, id: string) => {
     const row = db.prepare(`
       SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
-             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, play_count as playCount, is_favorite as isFavorite
+             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
+             play_count as playCount, is_favorite as isFavorite,
+             content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
+             mood, ai_tags as aiTags,
+             replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
       FROM tracks WHERE id = ?
-    `).get(id)
-    return row as Track | undefined
+    `).get(id) as any
+
+    if (!row) return undefined
+    return {
+      ...row,
+      isInstrumental: Boolean(row.isInstrumental),
+      isLive: Boolean(row.isLive),
+      aiTags: row.aiTags ? JSON.parse(row.aiTags) : []
+    } as Track
   })
 
-  // Get local lyrics if available (from .lrc file or embedded tags)
-  ipc.handle('library:getLyrics', async (_, id: string) => {
-    const track = db.prepare('SELECT path FROM tracks WHERE id = ?').get(id) as { path: string } | undefined
-    if (!track) return null
-
-    // 1. Check for .lrc sidecar file
-    const lrcPath = track.path.replace(/\.[^.]+$/, '.lrc')
-    try {
-      if (existsSync(lrcPath)) {
-        return await readFile(lrcPath, 'utf8')
-      }
-    } catch {}
-
-    // 2. Check for embedded lyrics
-    try {
-      const metadata = await parseFile(track.path, { duration: false, skipCovers: true })
-      if (metadata.common.lyrics && metadata.common.lyrics.length > 0) {
-        // music-metadata can return array of strings or objects. We handle both.
-        const lyric = metadata.common.lyrics[0]
-        return typeof lyric === 'string' ? lyric : (lyric as any).text || null
-      }
-    } catch {}
-
-    return null
-  })
-
-  // Get track artwork
+  // Get single track artwork (on-demand to save RAM)
   ipc.handle('library:getTrackArtwork', (_, id: string) => {
     const row = db.prepare('SELECT artwork FROM tracks WHERE id = ?').get(id) as { artwork: string | null } | undefined
-    return row?.artwork || null
+    return row?.artwork ?? null
   })
 
-  // Remove track from library
+  // Delete track from library
   ipc.handle('library:removeTrack', (_, id: string) => {
     db.prepare('DELETE FROM tracks WHERE id = ?').run(id)
+  })
+
+  // Get lyrics: sidecar .lrc or embedded tags
+  ipc.handle('library:getLyrics', async (_, id: string) => {
+    const row = db.prepare('SELECT path FROM tracks WHERE id = ?').get(id) as { path: string } | undefined
+    if (!row || !row.path) return null
+
+    // 1. Check for sidecar .lrc file beside track.path
+    const lrcPath = row.path.replace(/\.[^.]+$/, '.lrc')
+    if (existsSync(lrcPath)) {
+      try {
+        const content = await readFile(lrcPath, 'utf-8')
+        if (content && content.trim().length > 0) {
+          return content
+        }
+      } catch (err) {
+        console.error('[Library] Failed to read sidecar lyrics:', err)
+      }
+    }
+
+    // 2. Parse embedded lyrics via music-metadata
+    try {
+      const metadata = await parseFile(row.path, { duration: false, skipCovers: true })
+      const lyrics = metadata.common.lyrics
+      if (lyrics && lyrics.length > 0) {
+        const item = lyrics[0]
+        if (item.syncText && item.syncText.length > 0) {
+          const lines = item.syncText.map((s) => {
+            const totalSecs = (s.timestamp || 0) / 1000
+            const m = Math.floor(totalSecs / 60).toString().padStart(2, '0')
+            const sec = Math.floor(totalSecs % 60).toString().padStart(2, '0')
+            const ms = Math.floor((totalSecs % 1) * 100).toString().padStart(2, '0')
+            return `[${m}:${sec}.${ms}] ${s.text || ''}`
+          })
+          return lines.join('\n')
+        }
+        if (item.text && item.text.trim().length > 0) {
+          return item.text
+        }
+      }
+
+      if (metadata.native) {
+        for (const tagGroup of Object.values(metadata.native)) {
+          for (const tag of tagGroup) {
+            const idUpper = tag.id?.toUpperCase()
+            if (idUpper === 'USLT' || idUpper === 'LYRICS' || idUpper === 'UNSYNCEDLYRICS') {
+              const val = typeof tag.value === 'string' ? tag.value : (tag.value as any)?.text
+              if (val && val.trim().length > 0) return val
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Library] Failed to extract embedded lyrics:', err)
+    }
+
+    return null
   })
 
   // Get saved music folders
@@ -193,9 +295,9 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
 
   // Remove a music folder and its tracks
   ipc.handle('library:removeFolder', (_, folderPath: string) => {
-    db.prepare("DELETE FROM tracks WHERE path LIKE ?").run(`${folderPath}%`)
+    db.prepare('DELETE FROM tracks WHERE path LIKE ?').run(`${folderPath}%`)
     const folders = (getSetting('music_folders') as string[]) || []
-    setSetting('music_folders', folders.filter(f => f !== folderPath))
+    setSetting('music_folders', folders.filter((f) => f !== folderPath))
   })
 
   // Open native directory selection dialog
@@ -209,35 +311,19 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
     return result.filePaths[0]
   })
 
-  // Find and remove duplicate tracks (same title+artist, keep highest quality)
+  // Robust Cross-Album Duplicate Scanner: Remove duplicates keeping best quality
   ipc.handle('library:removeDuplicates', () => {
     const rows = db.prepare(`
-      SELECT id, path, title, artist, bit_depth as bitDepth, sample_rate as sampleRate, bitrate
+      SELECT id, path, title, artist, duration, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, format
       FROM tracks ORDER BY title COLLATE NOCASE, artist COLLATE NOCASE
-    `).all() as { id: string; path: string; title: string; artist: string; bitDepth: number; sampleRate: number; bitrate: number }[]
+    `).all() as any[]
 
-    // Group by normalized title+artist key
-    const groups = new Map<string, typeof rows>()
-    for (const row of rows) {
-      const key = `${(row.title || '').toLowerCase().trim()}||${(row.artist || '').toLowerCase().trim()}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(row)
-    }
-
-    // For each group with duplicates, keep the best quality track, delete the rest
+    const clusters = clusterDuplicateTracks(rows)
     let removed = 0
     const deleteStmt = db.prepare('DELETE FROM tracks WHERE id = ?')
 
-    for (const [, group] of groups) {
-      if (group.length <= 1) continue
-      // Score each track: prioritize bit depth, then sample rate, then bitrate
-      const scored = group.map(t => ({
-        ...t,
-        score: (t.bitDepth || 0) * 1_000_000 + (t.sampleRate || 0) * 10 + (t.bitrate || 0)
-      })).sort((a, b) => b.score - a.score)
-
-      // Keep the first (best quality), delete the rest
-      for (const dup of scored.slice(1)) {
+    for (const cluster of clusters) {
+      for (const dup of cluster.duplicates) {
         deleteStmt.run(dup.id)
         removed++
       }
@@ -246,23 +332,17 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
     return { removed, total: rows.length }
   })
 
-  // Find duplicate tracks (preview only, no deletion)
+  // Robust Cross-Album Duplicate Scanner: Preview duplicate count
   ipc.handle('library:findDuplicates', () => {
     const rows = db.prepare(`
-      SELECT id, path, title, artist, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, format
+      SELECT id, path, title, artist, duration, bit_depth as bitDepth, sample_rate as sampleRate, bitrate, format
       FROM tracks ORDER BY title COLLATE NOCASE, artist COLLATE NOCASE
-    `).all() as { id: string; path: string; title: string; artist: string; bitDepth: number; sampleRate: number; bitrate: number; format: string }[]
+    `).all() as any[]
 
-    const groups = new Map<string, typeof rows>()
-    for (const row of rows) {
-      const key = `${(row.title || '').toLowerCase().trim()}||${(row.artist || '').toLowerCase().trim()}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(row)
-    }
-
+    const clusters = clusterDuplicateTracks(rows)
     let count = 0
-    for (const [, group] of groups) {
-      if (group.length > 1) count += group.length - 1
+    for (const cluster of clusters) {
+      count += cluster.duplicates.length
     }
     return { duplicateCount: count }
   })

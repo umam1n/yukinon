@@ -32,6 +32,8 @@ const api = {
   // Playlists
   playlists: {
     create: (name: string) => ipcRenderer.invoke('playlists:create', name),
+    createSmart: (data: { name: string; ruleJson?: string; sqlFilter: string; icon?: string }) =>
+      ipcRenderer.invoke('playlists:createSmart', data),
     delete: (id: string) => ipcRenderer.invoke('playlists:delete', id),
     getAll: () => ipcRenderer.invoke('playlists:getAll'),
     getTracks: (id: string) => ipcRenderer.invoke('playlists:getTracks', id),
@@ -127,6 +129,17 @@ const api = {
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value)
+  },
+
+  // AI (Gemini 2.5 Flash Free)
+  ai: {
+    getApiKey: () => ipcRenderer.invoke('ai:getApiKey'),
+    setApiKey: (key: string) => ipcRenderer.invoke('ai:setApiKey', key),
+    testKey: (key: string) => ipcRenderer.invoke('ai:testKey', key),
+    generateSmartPlaylist: (params: { prompt: string; apiKey?: string }) =>
+      ipcRenderer.invoke('ai:generateSmartPlaylist', params),
+    enrichTracksBatch: (params?: { trackIds?: string[]; apiKey?: string }) =>
+      ipcRenderer.invoke('ai:enrichTracksBatch', params)
   },
 
   platform: process.platform

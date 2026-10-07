@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Music2, Shuffle, Repeat, Sparkles, Repeat1
@@ -14,11 +14,12 @@ function formatTime(secs: number): string {
 }
 
 export default function NowPlaying(): React.ReactElement {
-  const { player, tracks, togglePlayPause, playNext, playPrev, seekTo, setVolume, playbackMode, togglePlaybackMode, isSmartPlay, toggleSmartPlay, setActiveView } = useApp()
+  const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, setVolume, shuffle, repeat, toggleShuffle, toggleRepeat, isSmartPlay, toggleSmartPlay, setActiveView, renderAlbumArt } = useApp()
   const [isMuted, setIsMuted] = useState(false)
+  const prevVolumeRef = useRef(player.volume > 0 ? player.volume : 0.5)
   const [dragPosition, setDragPosition] = useState<number | null>(null)
 
-  const currentTrack = tracks.find((t) => t.id === player.currentTrackId)
+  const currentTrack = tracks.find((t) => t.id === player.currentTrackId) || queue.find((t) => t.id === player.currentTrackId)
 
   const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setDragPosition(Number(e.target.value))
@@ -33,7 +34,12 @@ export default function NowPlaying(): React.ReactElement {
 
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
-    setIsMuted(v === 0)
+    if (v > 0) {
+      prevVolumeRef.current = v
+      setIsMuted(false)
+    } else {
+      setIsMuted(true)
+    }
     setVolume(v)
   }, [setVolume])
 
@@ -41,44 +47,46 @@ export default function NowPlaying(): React.ReactElement {
     const newMuted = !isMuted
     setIsMuted(newMuted)
     if (newMuted) {
+      if (player.volume > 0) {
+        prevVolumeRef.current = player.volume
+      }
       setVolume(0)
     } else {
-      setVolume(0.8)
+      const restored = prevVolumeRef.current > 0 ? prevVolumeRef.current : 0.5
+      setVolume(restored)
     }
-  }, [isMuted, setVolume])
+  }, [isMuted, player.volume, setVolume])
 
   const progressPercent =
     player.duration > 0 ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100 : 0
 
   return (
     <div
-      className="glass"
       style={{
-        height: 80,
-        position: 'absolute',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 'calc(100% - 48px)',
-        maxWidth: 1000,
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        width: '100%',
+        height: 72,
+        background: 'var(--bg-2)',
+        borderTop: '1px solid var(--border)',
+        borderRadius: 0,
+        zIndex: 50,
         display: 'flex',
         alignItems: 'center',
         padding: '0 24px',
-        gap: 20,
-        borderRadius: 40,
-        boxShadow: '0 20px 40px rgba(0,0,0,0.2), 0 1px 3px rgba(0,0,0,0.1)',
-        zIndex: 50,
-        overflow: 'hidden'
+        gap: 20
       }}
     >
-      {/* Progress bar (positioned absolutely at the very bottom edge of the pill) */}
+      {/* Progress bar (positioned at the very top border of the docked deck) */}
       <div
         style={{
           position: 'absolute',
-          bottom: 0,
+          top: 0,
           left: 0,
           right: 0,
-          height: 4,
+          height: 3,
           background: 'transparent'
         }}
       >
@@ -138,7 +146,7 @@ export default function NowPlaying(): React.ReactElement {
             border: '1px solid var(--border)'
           }}
         >
-          {player.artwork ? (
+          {renderAlbumArt && player.artwork ? (
             <img
               src={player.artwork}
               alt="artwork"
@@ -215,6 +223,14 @@ export default function NowPlaying(): React.ReactElement {
             <Sparkles size={16} style={{ color: isSmartPlay ? 'var(--color-accent)' : 'inherit' }} />
           </ControlButton>
 
+          <ControlButton 
+            onClick={toggleShuffle} 
+            title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'} 
+            active={shuffle}
+          >
+            <Shuffle size={18} style={{ color: shuffle ? 'var(--color-accent)' : 'inherit' }} />
+          </ControlButton>
+
           <ControlButton onClick={playPrev} title="Previous">
             <SkipBack size={18} />
           </ControlButton>
@@ -245,14 +261,15 @@ export default function NowPlaying(): React.ReactElement {
           </ControlButton>
 
           <ControlButton 
-            onClick={togglePlaybackMode} 
-            title={playbackMode === 'normal' ? 'Normal' : playbackMode === 'shuffle' ? 'Shuffle' : playbackMode === 'repeat-all' ? 'Repeat All' : 'Repeat One'} 
-            active={playbackMode !== 'normal'}
+            onClick={toggleRepeat} 
+            title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`} 
+            active={repeat !== 'off'}
           >
-            {playbackMode === 'shuffle' && <Shuffle size={16} style={{ color: 'var(--color-accent)' }} />}
-            {playbackMode === 'repeat-all' && <Repeat size={16} style={{ color: 'var(--color-accent)' }} />}
-            {playbackMode === 'repeat-one' && <Repeat1 size={16} style={{ color: 'var(--color-accent)' }} />}
-            {playbackMode === 'normal' && <Repeat size={16} style={{ color: 'inherit' }} />}
+            {repeat === 'one' ? (
+              <Repeat1 size={18} style={{ color: 'var(--color-accent)' }} />
+            ) : (
+              <Repeat size={18} style={{ color: repeat !== 'off' ? 'var(--color-accent)' : 'inherit' }} />
+            )}
           </ControlButton>
         </div>
 

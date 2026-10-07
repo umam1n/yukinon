@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useState, useRef } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Music2, Shuffle, Repeat, Repeat1, Minimize2, ListMusic
@@ -14,8 +14,9 @@ function formatTime(secs: number): string {
 }
 
 export default function FullscreenPlayer(): React.ReactElement {
-  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, playbackMode, togglePlaybackMode, setActiveView, setVolume, seekTo } = useApp()
+  const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, shuffle, repeat, toggleShuffle, toggleRepeat, setActiveView, setVolume, seekTo, renderAlbumArt, reduceBlur } = useApp()
   const [isMuted, setIsMuted] = useState(false)
+  const prevVolumeRef = useRef(player.volume > 0 ? player.volume : 0.5)
   const [showLyrics, setShowLyrics] = useState(false)
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false)
@@ -73,7 +74,12 @@ export default function FullscreenPlayer(): React.ReactElement {
 
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
-    setIsMuted(v === 0)
+    if (v > 0) {
+      prevVolumeRef.current = v
+      setIsMuted(false)
+    } else {
+      setIsMuted(true)
+    }
     setVolume(v)
   }, [setVolume])
 
@@ -81,11 +87,15 @@ export default function FullscreenPlayer(): React.ReactElement {
     const newMuted = !isMuted
     setIsMuted(newMuted)
     if (newMuted) {
+      if (player.volume > 0) {
+        prevVolumeRef.current = player.volume
+      }
       setVolume(0)
     } else {
-      setVolume(0.8) // default fallback when unmuting if volume was 0
+      const restored = prevVolumeRef.current > 0 ? prevVolumeRef.current : 0.5
+      setVolume(restored)
     }
-  }, [isMuted, setVolume])
+  }, [isMuted, player.volume, setVolume])
 
   const progressPercent = player.duration > 0 ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100 : 0
 
@@ -116,7 +126,7 @@ export default function FullscreenPlayer(): React.ReactElement {
       overflow: 'hidden'
     }}>
       {/* Dynamic blurred background */}
-      {artwork && (
+      {renderAlbumArt && !reduceBlur && artwork && (
         <div style={{
           position: 'absolute',
           top: -100, left: -100, right: -100, bottom: -100,
@@ -174,7 +184,7 @@ export default function FullscreenPlayer(): React.ReactElement {
           overflow: 'hidden',
           flexShrink: 0
         }}>
-          {artwork ? (
+          {renderAlbumArt && artwork ? (
             <img src={artwork} alt="artwork" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <Music2 size={80} style={{ color: 'var(--text-dim)' }} />
@@ -229,14 +239,11 @@ export default function FullscreenPlayer(): React.ReactElement {
           {/* Main Controls */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 48 }}>
             <button
-              onClick={togglePlaybackMode}
-              title={playbackMode}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: playbackMode !== 'normal' ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
+              onClick={toggleShuffle}
+              title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: shuffle ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
             >
-              {playbackMode === 'shuffle' && <Shuffle size={24} />}
-              {playbackMode === 'repeat-all' && <Repeat size={24} />}
-              {playbackMode === 'repeat-one' && <Repeat1 size={24} />}
-              {playbackMode === 'normal' && <Repeat size={24} />}
+              <Shuffle size={24} />
             </button>
 
             <button onClick={playPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
@@ -259,6 +266,14 @@ export default function FullscreenPlayer(): React.ReactElement {
 
             <button onClick={playNext} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
               <SkipForward size={36} />
+            </button>
+
+            <button
+              onClick={toggleRepeat}
+              title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: repeat !== 'off' ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
+            >
+              {repeat === 'one' ? <Repeat1 size={24} /> : <Repeat size={24} />}
             </button>
             
             <button 

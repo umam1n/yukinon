@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '../../../../shared/types'
 
-export interface AppStore {
+export interface AppContextType {
   // Library
   tracks: Track[]
   setTracks: (tracks: Track[]) => void
@@ -18,10 +18,16 @@ export interface AppStore {
   queue: Track[]
   setQueue: (queue: Track[], startIndex?: number) => void
   addToQueue: (track: Track) => void
+  playNextTrack: (track: Track) => void
+  clearQueue: () => void
   removeFromQueue: (index: number) => void
   currentQueueIndex: number
-  playbackMode: 'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'
-  togglePlaybackMode: () => void
+  shuffle: boolean
+  repeat: 'off' | 'all' | 'one'
+  toggleShuffle: () => void
+  toggleRepeat: () => void
+  playbackMode?: 'normal' | 'shuffle' | 'repeat-all' | 'repeat-one'
+  togglePlaybackMode?: () => void
   isSmartPlay: boolean
   toggleSmartPlay: () => void
 
@@ -46,14 +52,28 @@ export interface AppStore {
   activeModules: { ytm: boolean; radio: boolean; subsonic: boolean; jellyfin: boolean }
   setActiveModules: (modules: Partial<{ ytm: boolean; radio: boolean; subsonic: boolean; jellyfin: boolean }>) => void
 
+  // Performance & Display
+  renderAlbumArt: boolean
+  setRenderAlbumArt: (enabled: boolean) => void
+  reduceBlur: boolean
+  setReduceBlur: (enabled: boolean) => void
+
+  // ReplayGain
+  replaygainEnabled: boolean
+  setReplayGainEnabled: (enabled: boolean) => void
+  replaygainPreamp: number
+  setReplayGainPreamp: (preamp: number) => void
+
   // Notifications
   notification: { message: string; type: 'success' | 'error' } | null
   notify: (message: string, type: 'success' | 'error') => void
 }
 
-export const AppContext = createContext<AppStore | null>(null)
+export type AppStore = AppContextType
 
-export function useApp(): AppStore {
+export const AppContext = createContext<AppContextType | null>(null)
+
+export function useApp(): AppContextType {
   const ctx = useContext(AppContext)
   if (!ctx) throw new Error('useApp must be used within AppProvider')
   return ctx

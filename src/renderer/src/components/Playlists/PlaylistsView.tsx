@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../store/AppContext'
-import { ListMusic, Plus, Trash2, Play, Shuffle, Disc, X } from 'lucide-react'
+import { ListMusic, Plus, Trash2, Play, Shuffle, Disc, X, Sparkles } from 'lucide-react'
 import type { Track } from '../../../../shared/types'
+import CreateSmartPlaylistModal from './CreateSmartPlaylistModal'
 
 export default function PlaylistsView(): React.ReactElement {
   const { play, setQueue } = useApp()
@@ -9,6 +10,7 @@ export default function PlaylistsView(): React.ReactElement {
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)
   const [tracks, setTracks] = useState<any[]>([])
   const [isCreating, setIsCreating] = useState(false)
+  const [isSmartModalOpen, setIsSmartModalOpen] = useState(false)
   const [newPlaylistName, setNewPlaylistName] = useState('')
 
   const loadPlaylists = async () => {
@@ -72,6 +74,16 @@ export default function PlaylistsView(): React.ReactElement {
 
   return (
     <div style={{ display: 'flex', height: '100%', background: 'var(--bg)' }}>
+      {/* Create Smart Playlist Modal */}
+      <CreateSmartPlaylistModal
+        isOpen={isSmartModalOpen}
+        onClose={() => setIsSmartModalOpen(false)}
+        onCreated={async (newId) => {
+          await loadPlaylists()
+          setActivePlaylistId(newId)
+        }}
+      />
+
       {/* Sidebar */}
       <div style={{ width: 280, borderRight: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -79,12 +91,35 @@ export default function PlaylistsView(): React.ReactElement {
             <ListMusic size={20} className="text-accent" />
             Playlists
           </h2>
-          <button
-            onClick={() => setIsCreating(true)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}
-          >
-            <Plus size={20} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={() => setIsSmartModalOpen(true)}
+              title="Create Smart Playlist (AI / Rules)"
+              style={{
+                background: 'rgba(168, 85, 247, 0.15)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                color: '#c084fc',
+                borderRadius: 6,
+                padding: '4px 8px',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <Sparkles size={13} />
+              <span>Smart</span>
+            </button>
+            <button
+              onClick={() => setIsCreating(true)}
+              title="Create Standard Playlist"
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}
+            >
+              <Plus size={20} />
+            </button>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
@@ -120,9 +155,12 @@ export default function PlaylistsView(): React.ReactElement {
               onMouseEnter={e => { if (activePlaylistId !== p.id) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
               onMouseLeave={e => { if (activePlaylistId !== p.id) e.currentTarget.style.background = 'transparent' }}
             >
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: activePlaylistId === p.id ? 'var(--text)' : 'var(--text-dim)' }}>{p.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.trackCount} tracks</div>
+              <div style={{ overflow: 'hidden', paddingRight: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: activePlaylistId === p.id ? 'var(--text)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                  {p.type === 'smart' && <Sparkles size={13} style={{ color: '#c084fc', flexShrink: 0 }} />}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.trackCount} tracks {p.type === 'smart' && '• Smart'}</div>
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeletePlaylist(p.id) }}
@@ -134,7 +172,7 @@ export default function PlaylistsView(): React.ReactElement {
           ))}
           {playlists.length === 0 && !isCreating && (
             <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>
-              No playlists found. Click + to create one.
+              No playlists found. Click + or Smart to create one.
             </div>
           )}
         </div>
@@ -153,7 +191,16 @@ export default function PlaylistsView(): React.ReactElement {
                 )}
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Playlist</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {activePlaylist.type === 'smart' ? (
+                    <>
+                      <Sparkles size={14} style={{ color: '#c084fc' }} />
+                      <span style={{ color: '#c084fc' }}>Smart Dynamic Playlist</span>
+                    </>
+                  ) : (
+                    'Playlist'
+                  )}
+                </div>
                 <h1 style={{ fontSize: 48, fontWeight: 800, margin: '0 0 16px 0', letterSpacing: '-0.02em' }}>{activePlaylist.name}</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <button
@@ -244,12 +291,15 @@ export default function PlaylistsView(): React.ReactElement {
                           >
                             Play
                           </button>
-                          <button
-                            onClick={() => handleRemoveTrack(track.playlistTrackId)}
-                            style={{ background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', padding: 6 }}
-                          >
-                            <X size={16} />
-                          </button>
+                          {activePlaylist.type !== 'smart' && (
+                            <button
+                              onClick={() => handleRemoveTrack(track.playlistTrackId)}
+                              style={{ background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', padding: 6 }}
+                              title="Remove from playlist"
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

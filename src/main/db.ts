@@ -5,66 +5,83 @@ import type { EQBands } from '../../shared/types'
 
 let db: Database.Database
 
+export const DB_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS tracks (
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL UNIQUE,
+    title TEXT,
+    artist TEXT,
+    album TEXT,
+    album_artist TEXT,
+    year INTEGER,
+    genre TEXT,
+    duration REAL,
+    artwork TEXT,
+    format TEXT,
+    bit_depth INTEGER,
+    sample_rate INTEGER,
+    bitrate INTEGER,
+    play_count INTEGER DEFAULT 0,
+    is_favorite BOOLEAN DEFAULT 0,
+    content_type TEXT DEFAULT 'music',
+    is_instrumental BOOLEAN DEFAULT 0,
+    is_live BOOLEAN DEFAULT 0,
+    mood TEXT,
+    ai_tags TEXT DEFAULT '[]',
+    replaygain_track_gain REAL,
+    replaygain_track_peak REAL,
+    added_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS playlists (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT DEFAULT 'static',
+    rule_json TEXT,
+    sql_filter TEXT,
+    icon TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS playlist_tracks (
+    id TEXT PRIMARY KEY,
+    playlist_id TEXT REFERENCES playlists(id) ON DELETE CASCADE,
+    track_id TEXT NOT NULL,
+    track_json TEXT NOT NULL,
+    position INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS eq_presets (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    bands TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS device_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_label TEXT NOT NULL UNIQUE,
+    preset_id TEXT,
+    preset_name TEXT,
+    bands TEXT NOT NULL DEFAULT '{}'
+  );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id);
+  CREATE INDEX IF NOT EXISTS idx_tracks_library ON tracks(artist, album, title);
+`
+
 export function initDatabase(): void {
   const dbPath = join(app.getPath('userData'), 'yukinon.db')
   db = new Database(dbPath, { timeout: 5000 })
   db.pragma('journal_mode = WAL')
 
+  db.exec(DB_SCHEMA_SQL)
   db.exec(`
-    CREATE TABLE IF NOT EXISTS tracks (
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL UNIQUE,
-      title TEXT,
-      artist TEXT,
-      album TEXT,
-      album_artist TEXT,
-      year INTEGER,
-      genre TEXT,
-      duration REAL,
-      artwork TEXT,
-      format TEXT,
-      bit_depth INTEGER,
-      sample_rate INTEGER,
-      bitrate INTEGER,
-      play_count INTEGER DEFAULT 0,
-      is_favorite BOOLEAN DEFAULT 0,
-      added_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS playlists (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS playlist_tracks (
-      id TEXT PRIMARY KEY,
-      playlist_id TEXT REFERENCES playlists(id) ON DELETE CASCADE,
-      track_id TEXT NOT NULL,
-      track_json TEXT NOT NULL,
-      position INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS eq_presets (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      bands TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS device_profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      device_label TEXT NOT NULL UNIQUE,
-      preset_id TEXT,
-      preset_name TEXT,
-      bands TEXT NOT NULL DEFAULT '{}'
-    );
-
-    CREATE TABLE IF NOT EXISTS app_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
     -- Insert default flat EQ preset if not exists
     INSERT OR IGNORE INTO eq_presets (id, name, bands) VALUES (
       'flat',
@@ -79,6 +96,8 @@ export function initDatabase(): void {
     INSERT OR IGNORE INTO app_settings (key, value) VALUES ('volume', '0.8');
     INSERT OR IGNORE INTO app_settings (key, value) VALUES ('active_eq_preset_id', '"flat"');
     INSERT OR IGNORE INTO app_settings (key, value) VALUES ('music_folders', '[]');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('replaygain_enabled', 'true');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('replaygain_preamp', '0');
   `)
 
   // Migrations for existing DB
@@ -87,6 +106,47 @@ export function initDatabase(): void {
   } catch (e) { /* ignore */ }
   try {
     db.exec('ALTER TABLE tracks ADD COLUMN is_favorite BOOLEAN DEFAULT 0;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec("ALTER TABLE tracks ADD COLUMN content_type TEXT DEFAULT 'music';")
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE tracks ADD COLUMN is_instrumental BOOLEAN DEFAULT 0;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE tracks ADD COLUMN is_live BOOLEAN DEFAULT 0;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE tracks ADD COLUMN mood TEXT;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec("ALTER TABLE tracks ADD COLUMN ai_tags TEXT DEFAULT '[]';")
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE tracks ADD COLUMN replaygain_track_gain REAL;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE tracks ADD COLUMN replaygain_track_peak REAL;')
+  } catch (e) { /* ignore */ }
+
+  try {
+    db.exec("ALTER TABLE playlists ADD COLUMN type TEXT DEFAULT 'static';")
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE playlists ADD COLUMN rule_json TEXT;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE playlists ADD COLUMN sql_filter TEXT;')
+  } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE playlists ADD COLUMN icon TEXT;')
+  } catch (e) { /* ignore */ }
+
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tracks_content_type ON tracks(content_type);')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tracks_mood ON tracks(mood);')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tracks_instrumental ON tracks(is_instrumental);')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tracks_live ON tracks(is_live);')
   } catch (e) { /* ignore */ }
 
   try {

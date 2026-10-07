@@ -1,5 +1,7 @@
 import { app, shell, BrowserWindow, BrowserView, ipcMain, globalShortcut, session, protocol, net } from 'electron'
-import { join } from 'path'
+import { join, extname } from 'path'
+import { statSync, createReadStream, existsSync } from 'fs'
+import { Readable } from 'stream'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerLibraryHandlers } from './ipc/library'
@@ -7,9 +9,21 @@ import { registerPlaylistsHandlers } from './ipc/playlists'
 import { registerEQHandlers } from './ipc/eq'
 import { registerDeviceHandlers } from './ipc/devices'
 import { registerThemeHandlers } from './ipc/theme'
+import { registerAiHandlers } from './ipc/ai'
 import { registerYTMHandlers, ytmView } from './ytm'
 import { initDatabase, getSetting, setSetting } from './db'
 import crypto from 'crypto'
+
+const AUDIO_MIME_TYPES: Record<string, string> = {
+  '.flac': 'audio/flac',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.opus': 'audio/opus',
+  '.aiff': 'audio/aiff'
+}
 
 let mainWindow: BrowserWindow
 
@@ -22,6 +36,9 @@ app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('ignore-gpu-blocklist') // Force GPU on Linux even if driver is unrecognized
 app.commandLine.appendSwitch('log-level', '3') // Suppress internal Chromium/VSync errors/warnings
 app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint') // Bypass Google Sign-In blocking
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
+}
 
 async function createWindow(): Promise<void> {
   await initDatabase()
@@ -109,15 +126,6 @@ app.whenReady().then(async () => {
       const filePath = url.searchParams.get('path')
       const targetUrl = url.searchParams.get('url')
 
-      let fetchUrl = ''
-      if (filePath) {
-        fetchUrl = pathToFileURL(filePath).toString()
-      } else if (targetUrl) {
-        fetchUrl = targetUrl
-      } else {
-        return new Response('Missing path or url parameter', { status: 400 })
-      }
-
       if (request.method === 'OPTIONS') {
         return new Response(null, {
           status: 204,
@@ -129,21 +137,83 @@ app.whenReady().then(async () => {
         })
       }
 
-      const response = await net.fetch(fetchUrl, {
-        method: request.method,
-        headers: request.headers,
-        bypassCustomProtocolHandlers: true // Prevent infinite loops
-      })
+      if (filePath) {
+        if (!existsSync(filePath)) {
+          return new Response('File not found', { status: 404 })
+        }
 
-      const responseHeaders = new Headers(response.headers)
-      responseHeaders.set('Access-Control-Allow-Origin', '*')
-      responseHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type')
+        const stat = statSync(filePath)
+        const fileSize = stat.size
+        const ext = extname(filePath).toLowerCase()
+        const contentType = AUDIO_MIME_TYPES[ext] || 'application/octet-stream'
+        const rangeHeader = request.headers.get('range')
 
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: responseHeaders
-      })
+        if (rangeHeader) {
+          const parts = rangeHeader.replace(/bytes=/, '').split('-')
+          const start = parseInt(parts[0], 10)
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1
+
+          if (isNaN(start) || start >= fileSize || (parts[1] && end < start)) {
+            return new Response('Requested Range Not Satisfiable', {
+              status: 416,
+              headers: {
+                'Content-Range': `bytes */${fileSize}`,
+                'Access-Control-Allow-Origin': '*'
+              }
+            })
+          }
+
+          const chunkSize = end - start + 1
+          const fileStream = createReadStream(filePath, { start, end })
+          const webStream = Readable.toWeb(fileStream)
+
+          return new Response(webStream as any, {
+            status: 206,
+            statusText: 'Partial Content',
+            headers: {
+              'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+              'Accept-Ranges': 'bytes',
+              'Content-Length': String(chunkSize),
+              'Content-Type': contentType,
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type'
+            }
+          })
+        } else {
+          const fileStream = createReadStream(filePath)
+          const webStream = Readable.toWeb(fileStream)
+          return new Response(webStream as any, {
+            status: 200,
+            headers: {
+              'Accept-Ranges': 'bytes',
+              'Content-Length': String(fileSize),
+              'Content-Type': contentType,
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type'
+            }
+          })
+        }
+      }
+
+      if (targetUrl) {
+        const response = await net.fetch(targetUrl, {
+          method: request.method,
+          headers: request.headers,
+          bypassCustomProtocolHandlers: true // Prevent infinite loops
+        })
+
+        const responseHeaders = new Headers(response.headers)
+        responseHeaders.set('Access-Control-Allow-Origin', '*')
+        responseHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type')
+
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders
+        })
+      }
+
+      return new Response('Missing path or url parameter', { status: 400 })
     } catch (err) {
       console.error('[Protocol] Error handling yukinon protocol request:', err)
       return new Response('Internal error or invalid URL', { status: 500 })
@@ -165,6 +235,7 @@ app.whenReady().then(async () => {
   registerDeviceHandlers(ipcMain)
   registerThemeHandlers(ipcMain, mainWindow)
   registerYTMHandlers(ipcMain, mainWindow)
+  registerAiHandlers(ipcMain)
 
   // Utilities
   ipcMain.handle('utils:md5', (_, text: string) => {
