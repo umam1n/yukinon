@@ -18,6 +18,15 @@ export default function NowPlaying(): React.ReactElement {
   const [isMuted, setIsMuted] = useState(false)
   const prevVolumeRef = useRef(player.volume > 0 ? player.volume : 0.5)
   const [dragPosition, setDragPosition] = useState<number | null>(null)
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const currentTrack = tracks.find((t) => t.id === player.currentTrackId) || queue.find((t) => t.id === player.currentTrackId)
 
@@ -64,7 +73,7 @@ export default function NowPlaying(): React.ReactElement {
     <div
       style={{
         position: 'fixed',
-        bottom: 0,
+        bottom: windowWidth < 500 ? 56 : 0,
         left: 0,
         right: 0,
         width: '100%',
@@ -75,7 +84,7 @@ export default function NowPlaying(): React.ReactElement {
         zIndex: 50,
         display: 'flex',
         alignItems: 'center',
-        padding: '0 24px',
+        padding: windowWidth < 520 ? '0 12px' : '0 24px',
         gap: 20
       }}
     >
@@ -127,7 +136,19 @@ export default function NowPlaying(): React.ReactElement {
       {/* Track Info (Clickable for Fullscreen) */}
       <div 
         onClick={() => setActiveView('fullscreen')}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, width: 260, flexShrink: 0, cursor: 'pointer', padding: 4, borderRadius: 8, transition: 'background 0.2s' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flex: '0 1 240px',
+          minWidth: 0,
+          maxWidth: 260,
+          flexShrink: 0,
+          cursor: 'pointer',
+          padding: 4,
+          borderRadius: 8,
+          transition: 'background 0.2s'
+        }}
         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
       >
@@ -158,7 +179,7 @@ export default function NowPlaying(): React.ReactElement {
         </div>
 
         {/* Title / Artist */}
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
               fontSize: 13,
@@ -219,11 +240,17 @@ export default function NowPlaying(): React.ReactElement {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ControlButton onClick={toggleSmartPlay} title="Smart Play (Favor Most Played & Favorites)" active={isSmartPlay}>
+          <ControlButton
+            className="nowplaying-secondary-btn"
+            onClick={toggleSmartPlay}
+            title="Smart Play (Favor Most Played & Favorites)"
+            active={isSmartPlay}
+          >
             <Sparkles size={16} style={{ color: isSmartPlay ? 'var(--color-accent)' : 'inherit' }} />
           </ControlButton>
 
           <ControlButton 
+            className="nowplaying-secondary-btn"
             onClick={toggleShuffle} 
             title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'} 
             active={shuffle}
@@ -261,6 +288,7 @@ export default function NowPlaying(): React.ReactElement {
           </ControlButton>
 
           <ControlButton 
+            className="nowplaying-secondary-btn"
             onClick={toggleRepeat} 
             title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`} 
             active={repeat !== 'off'}
@@ -281,9 +309,10 @@ export default function NowPlaying(): React.ReactElement {
 
       {/* Volume */}
       <div
+        className="nowplaying-volume"
         style={{
           width: 160,
-          display: 'flex',
+          display: windowWidth < 768 ? 'none' : 'flex',
           alignItems: 'center',
           gap: 8,
           flexShrink: 0
@@ -320,11 +349,12 @@ export default function NowPlaying(): React.ReactElement {
   )
 }
 
-function ControlButton({ onClick, children, title, active }: any) {
+function ControlButton({ onClick, children, title, active, className }: any) {
   return (
     <button
       onClick={onClick}
       title={title}
+      className={className}
       style={{
         background: active ? 'rgba(var(--color-accent-rgb), 0.15)' : 'none',
         border: 'none',

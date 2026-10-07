@@ -149,7 +149,13 @@ export function registerYTMHandlers(
     if (!mainWindow.getBrowserViews().includes(view)) {
       mainWindow.addBrowserView(view)
     }
-    view.setBounds({ x: 72, y: 0, width: w - 72, height: h - 110 })
+    const sidebarWidth = w < 720 ? (w < 500 ? 0 : 52) : 72
+    view.setBounds({
+      x: sidebarWidth,
+      y: 0,
+      width: Math.max(0, w - sidebarWidth),
+      height: Math.max(0, h - 110)
+    })
     mainWindow.setTopBrowserView(view)
   })
 

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Library,
   Youtube,
@@ -38,6 +38,21 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Sidebar(): React.ReactElement {
   const { activeView, setActiveView, activeModules } = useApp()
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  )
+
+  React.useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const isBottomNav = windowWidth < 500
+  const isSlim = windowWidth >= 500 && windowWidth < 720
+  const sidebarWidth = isSlim ? 52 : 72
+  const showLabels = !isBottomNav && !isSlim
+  const btnSize = isBottomNav ? 40 : isSlim ? 38 : 48
 
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (item.id === 'ytm' && !activeModules.ytm) return false
@@ -49,30 +64,50 @@ export default function Sidebar(): React.ReactElement {
 
   return (
     <aside
-      style={{
-        width: 72,
-        background: 'var(--bg)',
-        borderRight: '1px solid var(--border)',
-        flexShrink: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 4
-      }}
+      style={
+        isBottomNav
+          ? {
+              height: 56,
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 60,
+              width: '100%',
+              flexDirection: 'row',
+              justifyContent: 'space-around',
+              alignItems: 'center',
+              borderTop: '1px solid var(--border)',
+              background: 'var(--bg-2)',
+              display: 'flex',
+              padding: '0 8px',
+              overflowX: 'auto'
+            }
+          : {
+              width: sidebarWidth,
+              background: 'var(--bg)',
+              borderRight: '1px solid var(--border)',
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              paddingTop: 12,
+              paddingBottom: 12,
+              gap: 4
+            }
+      }
     >
       {visibleItems.map((item, index) => {
         const isActive = activeView === item.id
         const prevItem = visibleItems[index - 1]
-        const showDivider = prevItem && prevItem.category !== item.category
+        const showDivider = !isBottomNav && prevItem && prevItem.category !== item.category
 
         return (
           <React.Fragment key={item.id}>
             {showDivider && (
               <div
                 style={{
-                  width: 32,
+                  width: isSlim ? 24 : 32,
                   height: 1,
                   background: 'var(--border)',
                   margin: '4px 0'
@@ -83,20 +118,21 @@ export default function Sidebar(): React.ReactElement {
               onClick={() => setActiveView(item.id)}
               title={item.title}
               style={{
-                width: 48,
-                height: 48,
+                width: btnSize,
+                height: btnSize,
                 borderRadius: 6,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 3,
+                gap: showLabels ? 3 : 0,
                 cursor: 'pointer',
                 border: 'none',
                 background: isActive ? 'rgba(var(--color-accent-rgb), 0.15)' : 'transparent',
                 color: isActive ? 'var(--color-accent)' : 'var(--text-dim)',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                position: 'relative'
+                position: 'relative',
+                flexShrink: 0
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
@@ -113,9 +149,11 @@ export default function Sidebar(): React.ReactElement {
               }}
             >
               {item.icon}
-              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                {item.label}
-              </span>
+              {showLabels && (
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  {item.label}
+                </span>
+              )}
             </button>
           </React.Fragment>
         )

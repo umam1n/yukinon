@@ -46,8 +46,8 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1100,
-    minHeight: 700,
+    minWidth: 360,
+    minHeight: 260,
     frame: process.platform === 'darwin' ? false : true,
     ...(process.platform === 'darwin' ? {
       titleBarStyle: 'hidden',
@@ -75,7 +75,13 @@ async function createWindow(): Promise<void> {
     const [w, h] = mainWindow.getContentSize()
     // If YTM is active, update its bounds to fill content area (minus sidebar)
     if (ytmView && mainWindow.getBrowserViews().includes(ytmView)) {
-      ytmView.setBounds({ x: 72, y: 0, width: w - 72, height: h - 110 })
+      const sidebarWidth = w < 720 ? (w < 500 ? 0 : 52) : 72
+      ytmView.setBounds({
+        x: sidebarWidth,
+        y: 0,
+        width: Math.max(0, w - sidebarWidth),
+        height: Math.max(0, h - 110)
+      })
     }
   })
 

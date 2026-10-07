@@ -22,6 +22,21 @@ export default function FullscreenPlayer(): React.ReactElement {
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false)
   const [isPlainLyrics, setIsPlainLyrics] = useState(false)
   const [dragPosition, setDragPosition] = useState<number | null>(null)
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800
+  })
+
+  React.useEffect(() => {
+    const handleResize = () => setDimensions({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const isNarrowOrVertical =
+    dimensions.width < 800 ||
+    dimensions.height > dimensions.width * 1.05 ||
+    dimensions.height < 550
   
   const currentTrack = tracks.find((t) => t.id === player.currentTrackId)
   const lyricsContainerRef = React.useRef<HTMLDivElement>(null)
@@ -170,137 +185,207 @@ export default function FullscreenPlayer(): React.ReactElement {
         </button>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px', padding: '0 80px' }}>
-        {/* Left Side: Massive Artwork */}
-        <div style={{
-          width: 'min(500px, 45vh)',
-          height: 'min(500px, 45vh)',
-          borderRadius: 24,
-          background: 'rgba(0,0,0,0.2)',
-          boxShadow: '0 40px 80px rgba(0,0,0,0.5)',
+      <div
+        style={{
+          flex: 1,
           display: 'flex',
+          flexDirection: isNarrowOrVertical ? 'column' : 'row',
           alignItems: 'center',
           justifyContent: 'center',
-          overflow: 'hidden',
-          flexShrink: 0
-        }}>
+          gap: isNarrowOrVertical ? 16 : '80px',
+          padding: isNarrowOrVertical ? '16px 20px' : '0 80px',
+          overflowY: isNarrowOrVertical ? 'auto' : 'hidden'
+        }}
+      >
+        {/* Left Side: Artwork */}
+        <div
+          style={{
+            width: isNarrowOrVertical ? 'min(240px, 32vh, 50vw)' : 'min(500px, 45vh)',
+            height: isNarrowOrVertical ? 'min(240px, 32vh, 50vw)' : 'min(500px, 45vh)',
+            borderRadius: isNarrowOrVertical ? 16 : 24,
+            background: 'rgba(0,0,0,0.2)',
+            boxShadow: '0 40px 80px rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            flexShrink: 0
+          }}
+        >
           {renderAlbumArt && artwork ? (
             <img src={artwork} alt="artwork" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <Music2 size={80} style={{ color: 'var(--text-dim)' }} />
+            <Music2 size={isNarrowOrVertical ? 48 : 80} style={{ color: 'var(--text-dim)' }} />
           )}
         </div>
 
         {/* Right Side: Track Info & Controls OR Lyrics */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, maxWidth: 600, height: 'min(500px, 45vh)', position: 'relative' }}>
-          
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            width: '100%',
+            maxWidth: isNarrowOrVertical ? 'min(500px, 90vw)' : 600,
+            height: isNarrowOrVertical ? 'auto' : 'min(500px, 45vh)',
+            position: 'relative'
+          }}
+        >
           {/* Default Controls View */}
-          <div style={{ 
-            display: 'flex', flexDirection: 'column', height: '100%',
-            opacity: showLyrics ? 0 : 1, pointerEvents: showLyrics ? 'none' : 'auto',
-            transition: 'opacity 0.3s ease', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 
-          }}>
-            <div style={{ fontSize: 48, fontWeight: 800, marginBottom: 8, lineHeight: 1.2, textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
-            {title}
-          </div>
-          <div style={{ fontSize: 24, color: 'var(--text-muted)', marginBottom: 40, fontWeight: 500 }}>
-            {artist}
-          </div>
-
-          {/* Scrubber */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-            <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
-              <input
-                type="range"
-                min={0}
-                max={player.duration || 0}
-                value={dragPosition !== null ? dragPosition : player.position}
-                step={0.5}
-                onChange={handleSeekChange}
-                onMouseUp={handleSeekEnd}
-                onTouchEnd={handleSeekEnd}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10 }}
-              />
-              <div style={{
-                height: '100%',
-                width: `${progressPercent}%`,
-                background: 'var(--color-accent)',
-                borderRadius: 4,
-                transition: 'width 0.1s linear',
-                boxShadow: '0 0 10px rgba(var(--color-accent-rgb), 0.5)'
-              }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
-              <span>{formatTime(dragPosition !== null ? dragPosition : player.position)}</span>
-              <span>{formatTime(player.duration)}</span>
-            </div>
-          </div>
-
-          {/* Main Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 48 }}>
-            <button
-              onClick={toggleShuffle}
-              title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: shuffle ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
-            >
-              <Shuffle size={24} />
-            </button>
-
-            <button onClick={playPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
-              <SkipBack size={36} />
-            </button>
-
-            <button
-              onClick={togglePlayPause}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              opacity: showLyrics ? 0 : 1,
+              pointerEvents: showLyrics ? 'none' : 'auto',
+              transition: 'opacity 0.3s ease',
+              position: isNarrowOrVertical ? 'relative' : 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0
+            }}
+          >
+            <div
               style={{
-                width: 80, height: 80, borderRadius: '50%', background: 'var(--text)', color: 'var(--bg)', border: 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                boxShadow: '0 10px 20px rgba(0,0,0,0.2)', transition: 'transform 0.1s'
+                fontSize: isNarrowOrVertical ? 'clamp(18px, 4.5vw, 32px)' : 48,
+                fontWeight: 800,
+                marginBottom: isNarrowOrVertical ? 4 : 8,
+                lineHeight: 1.2,
+                textShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                textAlign: isNarrowOrVertical ? 'center' : 'left'
               }}
-              onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
-              onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
             >
-              {player.status === 'playing' ? <Pause size={40} fill="currentColor" /> : <Play size={40} fill="currentColor" style={{ marginLeft: 6 }} />}
-            </button>
+              {title}
+            </div>
+            <div
+              style={{
+                fontSize: isNarrowOrVertical ? 'clamp(13px, 3vw, 18px)' : 24,
+                color: 'var(--text-muted)',
+                marginBottom: isNarrowOrVertical ? 16 : 40,
+                fontWeight: 500,
+                textAlign: isNarrowOrVertical ? 'center' : 'left'
+              }}
+            >
+              {artist}
+            </div>
 
-            <button onClick={playNext} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
-              <SkipForward size={36} />
-            </button>
+            {/* Scrubber */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: isNarrowOrVertical ? 16 : 32 }}>
+              <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 4 }}>
+                <input
+                  type="range"
+                  min={0}
+                  max={player.duration || 0}
+                  value={dragPosition !== null ? dragPosition : player.position}
+                  step={0.5}
+                  onChange={handleSeekChange}
+                  onMouseUp={handleSeekEnd}
+                  onTouchEnd={handleSeekEnd}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10 }}
+                />
+                <div style={{
+                  height: '100%',
+                  width: `${progressPercent}%`,
+                  background: 'var(--color-accent)',
+                  borderRadius: 4,
+                  transition: 'width 0.1s linear',
+                  boxShadow: '0 0 10px rgba(var(--color-accent-rgb), 0.5)'
+                }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
+                <span>{formatTime(dragPosition !== null ? dragPosition : player.position)}</span>
+                <span>{formatTime(player.duration)}</span>
+              </div>
+            </div>
 
-            <button
-              onClick={toggleRepeat}
-              title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: repeat !== 'off' ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
-            >
-              {repeat === 'one' ? <Repeat1 size={24} /> : <Repeat size={24} />}
-            </button>
-            
-            <button 
-              onClick={() => setShowLyrics(true)}
-              title="Lyrics" 
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', transition: 'color 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
-            >
-              <ListMusic size={24} />
-            </button>
+            {/* Main Controls */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: isNarrowOrVertical ? 20 : 32,
+              marginBottom: isNarrowOrVertical ? 16 : 48
+            }}>
+              <button
+                onClick={toggleShuffle}
+                title={shuffle ? 'Shuffle: On' : 'Shuffle: Off'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: shuffle ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
+              >
+                <Shuffle size={isNarrowOrVertical ? 20 : 24} />
+              </button>
+
+              <button onClick={playPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
+                <SkipBack size={isNarrowOrVertical ? 28 : 36} />
+              </button>
+
+              <button
+                onClick={togglePlayPause}
+                style={{
+                  width: isNarrowOrVertical ? 56 : 80,
+                  height: isNarrowOrVertical ? 56 : 80,
+                  borderRadius: '50%',
+                  background: 'var(--text)',
+                  color: 'var(--bg)',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 10px 20px rgba(0,0,0,0.2)',
+                  transition: 'transform 0.1s'
+                }}
+                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
+                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                {player.status === 'playing' ? (
+                  <Pause size={isNarrowOrVertical ? 28 : 40} fill="currentColor" />
+                ) : (
+                  <Play size={isNarrowOrVertical ? 28 : 40} fill="currentColor" style={{ marginLeft: 4 }} />
+                )}
+              </button>
+
+              <button onClick={playNext} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
+                <SkipForward size={isNarrowOrVertical ? 28 : 36} />
+              </button>
+
+              <button
+                onClick={toggleRepeat}
+                title={`Repeat: ${repeat === 'off' ? 'Off' : repeat === 'all' ? 'All' : 'One'}`}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: repeat !== 'off' ? 'var(--color-accent)' : 'var(--text-dim)', transition: 'color 0.2s' }}
+              >
+                {repeat === 'one' ? <Repeat1 size={isNarrowOrVertical ? 20 : 24} /> : <Repeat size={isNarrowOrVertical ? 20 : 24} />}
+              </button>
+              
+              <button 
+                onClick={() => setShowLyrics(true)}
+                title="Lyrics" 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', transition: 'color 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
+              >
+                <ListMusic size={isNarrowOrVertical ? 20 : 24} />
+              </button>
+            </div>
+
+            {/* Volume (hidden if dimensions.height < 500) */}
+            {dimensions.height >= 500 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: 200, margin: '0 auto' }}>
+                <button onClick={toggleMute} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </button>
+                <input
+                  type="range"
+                  min={0} max={1} step={0.01}
+                  value={isMuted ? 0 : player.volume ?? 0.8}
+                  onChange={handleVolume}
+                  style={{ flex: 1, height: 6, accentColor: 'var(--text)', cursor: 'pointer' }}
+                />
+              </div>
+            )}
           </div>
-
-          {/* Volume */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: 200, margin: '0 auto' }}>
-            <button onClick={toggleMute} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-            </button>
-            <input
-              type="range"
-              min={0} max={1} step={0.01}
-              value={isMuted ? 0 : player.volume ?? 0.8}
-              onChange={handleVolume}
-              style={{ flex: 1, height: 6, accentColor: 'var(--text)', cursor: 'pointer' }}
-            />
-          </div>
-        </div>
 
         {/* Lyrics View */}
           <div style={{

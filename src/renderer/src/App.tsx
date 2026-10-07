@@ -20,6 +20,15 @@ import FullscreenPlayer from './components/FullscreenPlayer'
 function AppInner(): React.ReactElement {
   const { activeView, setActiveView, player, togglePlayPause, seekTo, setVolume, notification } = useApp()
   const showTitleBar = window.yukinon.platform === 'darwin'
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -98,12 +107,12 @@ function AppInner(): React.ReactElement {
       )}
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className={`flex flex-1 overflow-hidden ${windowWidth < 500 ? 'flex-col' : 'flex-row'}`}>
         {/* Sidebar Navigation */}
         <Sidebar />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-hidden relative" style={{ paddingBottom: activeView === 'fullscreen' ? 0 : 72 }}>
+        <main className="flex-1 overflow-hidden relative" style={{ paddingBottom: activeView === 'fullscreen' ? 0 : (windowWidth < 500 ? 128 : 72) }}>
           {activeView === 'library' && <LibraryView />}
           {activeView === 'playlists' && <PlaylistsView />}
           {activeView === 'queue' && <QueueView />}

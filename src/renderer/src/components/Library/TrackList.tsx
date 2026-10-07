@@ -41,6 +41,7 @@ export default function TrackList({
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(1000)
   const [viewportHeight, setViewportHeight] = useState(600)
 
   useEffect(() => {
@@ -48,11 +49,15 @@ export default function TrackList({
     if (!el) return
 
     setViewportHeight(el.clientHeight || 600)
+    setContainerWidth(el.clientWidth || 1000)
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.height > 0) {
           setViewportHeight(entry.contentRect.height)
+        }
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width)
         }
       }
     })
@@ -60,6 +65,16 @@ export default function TrackList({
 
     return () => resizeObserver.disconnect()
   }, [])
+
+  const layoutMode: 'wide' | 'medium' | 'compact' =
+    containerWidth >= 850 ? 'wide' : containerWidth >= 600 ? 'medium' : 'compact'
+
+  const gridTemplate =
+    layoutMode === 'wide'
+      ? '40px 40px 1fr 1fr 110px 60px 110px'
+      : layoutMode === 'medium'
+      ? '36px 36px 1fr 1fr 55px 90px'
+      : '36px 1fr 50px 70px'
 
   // Close context menu on outside click or Escape
   useEffect(() => {
@@ -201,9 +216,9 @@ export default function TrackList({
           zIndex: 10,
           background: 'var(--bg)',
           display: 'grid',
-          gridTemplateColumns: '40px 40px 1fr 1fr 110px 60px 110px',
-          gap: 16,
-          padding: '12px 24px 8px 24px',
+          gridTemplateColumns: gridTemplate,
+          gap: layoutMode === 'compact' ? 8 : 16,
+          padding: layoutMode === 'compact' ? '12px 12px 8px 12px' : '12px 24px 8px 24px',
           fontSize: 11,
           fontWeight: 700,
           color: 'var(--text-dim)',
@@ -213,11 +228,11 @@ export default function TrackList({
           marginBottom: 4
         }}
       >
-        {renderHeaderCol('index', '#', 'center')}
+        {layoutMode !== 'compact' && renderHeaderCol('index', '#', 'center')}
         <span></span> {/* Avatar space */}
         {renderHeaderCol('title', 'Title', 'left')}
-        {renderHeaderCol('album', 'Album', 'left')}
-        {renderHeaderCol('format', 'Format', 'left')}
+        {layoutMode === 'wide' && renderHeaderCol('album', 'Album', 'left')}
+        {layoutMode !== 'compact' && renderHeaderCol('format', 'Format', 'left')}
         {renderHeaderCol('duration', 'Time', 'right')}
         <span style={{ textAlign: 'right' }}></span>
       </div>
@@ -249,15 +264,15 @@ export default function TrackList({
             }}
             style={{
               display: 'grid',
-              gridTemplateColumns: '40px 40px 1fr 1fr 110px 60px 110px',
-              gap: 16,
-              padding: '8px 24px',
+              gridTemplateColumns: gridTemplate,
+              gap: layoutMode === 'compact' ? 8 : 16,
+              padding: layoutMode === 'compact' ? '8px 12px' : '8px 24px',
               height: 52,
               boxSizing: 'border-box',
               alignItems: 'center',
               cursor: 'pointer',
               borderRadius: 8,
-              margin: '2px 12px',
+              margin: layoutMode === 'compact' ? '2px 4px' : '2px 12px',
               background: isActive
                 ? 'rgba(var(--color-accent-rgb), 0.12)'
                 : isSelected
@@ -279,29 +294,31 @@ export default function TrackList({
                 (e.currentTarget as HTMLDivElement).style.background = 'transparent'
             }}
           >
-            {/* Index / Playing indicator */}
-            <div
-              style={{
-                fontSize: 12,
-                color: isActive ? 'var(--color-accent)' : 'var(--text-dim)',
-                fontFamily: 'JetBrains Mono, monospace',
-                fontVariantNumeric: 'tabular-nums',
-                textAlign: 'center',
-                fontWeight: isActive ? 700 : 500
-              }}
-            >
-              {isPlaying ? (
-                <span style={{ color: 'var(--color-accent)' }}>▶</span>
-              ) : (
-                track.trackNumber || i + 1
-              )}
-            </div>
+            {/* Index / Playing indicator (omitted in compact) */}
+            {layoutMode !== 'compact' && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: isActive ? 'var(--color-accent)' : 'var(--text-dim)',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontVariantNumeric: 'tabular-nums',
+                  textAlign: 'center',
+                  fontWeight: isActive ? 700 : 500
+                }}
+              >
+                {isPlaying ? (
+                  <span style={{ color: 'var(--color-accent)' }}>▶</span>
+                ) : (
+                  track.trackNumber || i + 1
+                )}
+              </div>
+            )}
 
             {/* Track Avatar / Icon */}
             <div
               style={{
-                width: 36,
-                height: 36,
+                width: layoutMode === 'compact' ? 32 : 36,
+                height: layoutMode === 'compact' ? 32 : 36,
                 borderRadius: 6,
                 background: isActive ? 'var(--color-accent)' : 'var(--bg-3)',
                 display: 'flex',
@@ -320,7 +337,7 @@ export default function TrackList({
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <Music2 size={16} color={isActive ? '#fff' : 'var(--text-dim)'} />
+                <Music2 size={layoutMode === 'compact' ? 14 : 16} color={isActive ? '#fff' : 'var(--text-dim)'} />
               )}
             </div>
 
@@ -351,47 +368,51 @@ export default function TrackList({
               </div>
             </div>
 
-            {/* Album */}
-            <div
-              style={{
-                fontSize: 12,
-                color: 'var(--text-muted)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {track.album}
-            </div>
-
-            {/* Format badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span
+            {/* Album (wide only) */}
+            {layoutMode === 'wide' && (
+              <div
                 style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  background: 'rgba(var(--color-accent-rgb), 0.12)',
-                  color: 'var(--color-accent)',
-                  textTransform: 'uppercase',
-                  fontFamily: 'JetBrains Mono, monospace'
+                  fontSize: 12,
+                  color: 'var(--text-muted)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                {track.format}
-              </span>
-              {track.bitDepth && (
+                {track.album}
+              </div>
+            )}
+
+            {/* Format badge (omitted in compact) */}
+            {layoutMode !== 'compact' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span
                   style={{
                     fontSize: 10,
-                    color: 'var(--text-dim)',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'rgba(var(--color-accent-rgb), 0.12)',
+                    color: 'var(--color-accent)',
+                    textTransform: 'uppercase',
                     fontFamily: 'JetBrains Mono, monospace'
                   }}
                 >
-                  {track.bitDepth}bit
+                  {track.format}
                 </span>
-              )}
-            </div>
+                {track.bitDepth && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--text-dim)',
+                      fontFamily: 'JetBrains Mono, monospace'
+                    }}
+                  >
+                    {track.bitDepth}bit
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Duration */}
             <div
