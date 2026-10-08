@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../store/AppContext'
-import { ListMusic, Plus, Trash2, Play, Shuffle, Disc, X, Sparkles } from 'lucide-react'
+import { ListMusic, Plus, Trash2, Play, Shuffle, Disc, X, Sparkles, ArrowLeft } from 'lucide-react'
 import type { Track } from '../../../../shared/types'
 import CreateSmartPlaylistModal from './CreateSmartPlaylistModal'
+import TrackList from '../Library/TrackList'
 
 export default function PlaylistsView(): React.ReactElement {
   const { play, setQueue } = useApp()
@@ -12,6 +13,15 @@ export default function PlaylistsView(): React.ReactElement {
   const [isCreating, setIsCreating] = useState(false)
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false)
   const [newPlaylistName, setNewPlaylistName] = useState('')
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const loadPlaylists = async () => {
     const list = await window.yukinon.playlists.getAll()
@@ -85,7 +95,15 @@ export default function PlaylistsView(): React.ReactElement {
       />
 
       {/* Sidebar */}
-      <div style={{ width: 280, borderRight: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          width: windowWidth < 720 ? '100%' : 280,
+          borderRight: windowWidth < 720 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+          display: windowWidth < 720 && activePlaylistId ? 'none' : 'flex',
+          flexDirection: 'column',
+          flexShrink: 0
+        }}
+      >
         <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ListMusic size={20} className="text-accent" />
@@ -179,138 +197,129 @@ export default function PlaylistsView(): React.ReactElement {
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        style={{
+          flex: 1,
+          display: windowWidth < 720 && !activePlaylistId ? 'none' : 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden'
+        }}
+      >
         {activePlaylist ? (
-          <div style={{ padding: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24, marginBottom: 32 }}>
-              <div style={{ width: 160, height: 160, borderRadius: 12, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
-                {tracks.length > 0 && tracks[0].artwork ? (
-                  <img src={tracks[0].artwork} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
-                ) : (
-                  <ListMusic size={64} color="var(--text-muted)" />
-                )}
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {activePlaylist.type === 'smart' ? (
-                    <>
-                      <Sparkles size={14} style={{ color: '#c084fc' }} />
-                      <span style={{ color: '#c084fc' }}>Smart Dynamic Playlist</span>
-                    </>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div style={{ padding: windowWidth < 600 ? '16px 16px 12px 16px' : '24px 32px 16px 32px', flexShrink: 0 }}>
+              {windowWidth < 720 && (
+                <button
+                  onClick={() => setActivePlaylistId(null)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-accent)',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: 12,
+                    padding: 0
+                  }}
+                >
+                  <ArrowLeft size={16} /> Back to Playlists
+                </button>
+              )}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: windowWidth < 600 ? 16 : 24, marginBottom: 16 }}>
+                <div
+                  style={{
+                    width: 'clamp(80px, 15vw, 160px)',
+                    height: 'clamp(80px, 15vw, 160px)',
+                    borderRadius: 12,
+                    background: 'rgba(0,0,0,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                    flexShrink: 0,
+                    overflow: 'hidden'
+                  }}
+                >
+                  {tracks.length > 0 && tracks[0].artwork ? (
+                    <img src={tracks[0].artwork} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
                   ) : (
-                    'Playlist'
+                    <ListMusic size={40} color="var(--text-muted)" />
                   )}
                 </div>
-                <h1 style={{ fontSize: 48, fontWeight: 800, margin: '0 0 16px 0', letterSpacing: '-0.02em' }}>{activePlaylist.name}</h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button
-                    onClick={() => handlePlayAll(false)}
-                    disabled={tracks.length === 0}
-                    style={{
-                      background: 'var(--color-accent)',
-                      color: 'black',
-                      border: 'none',
-                      borderRadius: 24,
-                      padding: '12px 24px',
-                      fontSize: 14,
-                      fontWeight: 700,
-                      cursor: tracks.length ? 'pointer' : 'not-allowed',
-                      opacity: tracks.length ? 1 : 0.5,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    <Play size={18} fill="currentColor" /> Play
-                  </button>
-                  <button
-                    onClick={() => handlePlayAll(true)}
-                    disabled={tracks.length === 0}
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      color: 'var(--text)',
-                      border: 'none',
-                      borderRadius: 24,
-                      padding: '12px 24px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: tracks.length ? 'pointer' : 'not-allowed',
-                      opacity: tracks.length ? 1 : 0.5,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    <Shuffle size={18} /> Shuffle
-                  </button>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {activePlaylist.type === 'smart' ? (
+                      <>
+                        <Sparkles size={14} style={{ color: '#c084fc' }} />
+                        <span style={{ color: '#c084fc' }}>Smart Dynamic Playlist</span>
+                      </>
+                    ) : (
+                      'Playlist'
+                    )}
+                  </div>
+                  <h1 style={{ fontSize: 'clamp(24px, 4vw, 48px)', fontWeight: 800, margin: '0 0 12px 0', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {activePlaylist.name}
+                  </h1>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => handlePlayAll(false)}
+                      disabled={tracks.length === 0}
+                      style={{
+                        background: 'var(--color-accent)',
+                        color: 'black',
+                        border: 'none',
+                        borderRadius: 24,
+                        padding: '10px 20px',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: tracks.length ? 'pointer' : 'not-allowed',
+                        opacity: tracks.length ? 1 : 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Play size={16} fill="currentColor" /> Play
+                    </button>
+                    <button
+                      onClick={() => handlePlayAll(true)}
+                      disabled={tracks.length === 0}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'var(--text)',
+                        border: 'none',
+                        borderRadius: 24,
+                        padding: '10px 20px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: tracks.length ? 'pointer' : 'not-allowed',
+                        opacity: tracks.length ? 1 : 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Shuffle size={16} /> Shuffle
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {tracks.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-dim)' }}>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>#</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Title</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Artist</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Source</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tracks.map((track, idx) => (
-                    <tr
-                      key={track.playlistTrackId}
-                      style={{
-                        borderBottom: '1px solid rgba(255,255,255,0.03)',
-                        transition: 'background 0.2s',
-                        cursor: 'default'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{idx + 1}</td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          {track.artwork ? (
-                            <img src={track.artwork} style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ width: 40, height: 40, borderRadius: 4, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Disc size={20} color="var(--text-dim)" /></div>
-                          )}
-                          <div style={{ fontWeight: 600, color: 'var(--text)' }}>{track.title}</div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{track.artist}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14, textTransform: 'capitalize' }}>{track.source}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                          <button
-                            onClick={() => handlePlayTrack(idx)}
-                            style={{ background: 'var(--color-accent)', color: 'black', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                          >
-                            Play
-                          </button>
-                          {activePlaylist.type !== 'smart' && (
-                            <button
-                              onClick={() => handleRemoveTrack(track.playlistTrackId)}
-                              style={{ background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', padding: 6 }}
-                              title="Remove from playlist"
-                            >
-                              <X size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
-                This playlist is empty. Add songs from your library or Jellyfin/Subsonic.
-              </div>
-            )}
+            {/* Virtualized Responsive TrackList */}
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {tracks.length > 0 ? (
+                <TrackList tracks={tracks} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
+                  This playlist is empty. Add songs from your library or Jellyfin/Subsonic.
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)' }}>

@@ -1,10 +1,15 @@
-import { BrowserView, BrowserWindow, ipcMain as IpcMain, session } from 'electron'
+import { app, shell, BrowserView, BrowserWindow, ipcMain as IpcMain, session } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { setupAdblocker } from './adblocker'
 import { getSetting } from './db'
 
 export let ytmView: BrowserView | null = null
+
+export function getCleanChromeUA(): string {
+  const base = session.defaultSession.getUserAgent() || app.userAgentFallback || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+  return base.replace(/Electron\/[0-9\.]+\s?/, '').replace(/Yukinon\/[0-9\.]+\s?/, '').trim()
+}
 
 export function getOrCreateYTMView(): BrowserView {
   if (ytmView) return ytmView
@@ -24,21 +29,42 @@ export function getOrCreateYTMView(): BrowserView {
     console.log(`[YTM Preload/Console] ${message} (line ${line} in ${sourceId})`)
   })
 
-  ytmView.webContents.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0'
-  )
+  const cleanUA = getCleanChromeUA()
+  ytmView.webContents.setUserAgent(cleanUA)
 
   ytmView.webContents.loadURL('https://music.youtube.com')
 
   const ytmSession = session.fromPartition('persist:ytm')
 
-  // Bulletproof bypass for Google Sign In
+  // Bulletproof headers and client hints for Google Sign In & YouTube
   ytmSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0'
-    delete details.requestHeaders['sec-ch-ua']
-    delete details.requestHeaders['sec-ch-ua-mobile']
-    delete details.requestHeaders['sec-ch-ua-platform']
+    details.requestHeaders['User-Agent'] = cleanUA
+    if (details.url.includes('google.com') || details.url.includes('youtube.com')) {
+      details.requestHeaders['sec-ch-ua'] = '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"'
+      details.requestHeaders['sec-ch-ua-mobile'] = '?0'
+      details.requestHeaders['sec-ch-ua-platform'] = process.platform === 'win32' ? '"Windows"' : process.platform === 'darwin' ? '"macOS"' : '"Linux"'
+    }
     callback({ cancel: false, requestHeaders: details.requestHeaders })
+  })
+
+  ytmView.webContents.setWindowOpenHandler((details) => {
+    if (details.url.includes('accounts.google.com') || details.url.includes('google.com') || details.url.includes('youtube.com')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520,
+          height: 720,
+          autoHideMenuBar: true,
+          webPreferences: {
+            partition: 'persist:ytm',
+            contextIsolation: true,
+            nodeIntegration: false
+          }
+        }
+      }
+    }
+    shell.openExternal(details.url)
+    return { action: 'deny' }
   })
 
   // Setup ad blocker for this session
@@ -52,27 +78,30 @@ export function getOrCreateYTMView(): BrowserView {
   })
 
   ytmView.webContents.on('did-finish-load', () => {
-    const accent = (getSetting('accent_color') as string) || '#c084fc'
-    const themeMode = (getSetting('theme_mode') as string) || 'dark'
-    const isDark = themeMode === 'dark'
+    const currentUrl = ytmView?.webContents.getURL() || ''
+    if (currentUrl.includes('youtube.com') && !currentUrl.includes('accounts.google.com')) {
+      const accent = (getSetting('accent_color') as string) || '#c084fc'
+      const themeMode = (getSetting('theme_mode') as string) || 'dark'
+      const isDark = themeMode === 'dark'
 
-    ytmView?.webContents.insertCSS(buildYTMCSS(accent, themeMode))
+      ytmView?.webContents.insertCSS(buildYTMCSS(accent, themeMode))
 
-    // Wait for YTM's own React/Polymer to initialize before setting dark attribute
-    setTimeout(() => {
-      ytmView?.webContents.executeJavaScript(`
-        (function() {
-          const html = document.querySelector('html');
-          if (html) {
-            if (${isDark}) {
-              html.setAttribute('dark', '');
-            } else {
-              html.removeAttribute('dark');
+      // Wait for YTM's own React/Polymer to initialize before setting dark attribute
+      setTimeout(() => {
+        ytmView?.webContents.executeJavaScript(`
+          (function() {
+            const html = document.querySelector('html');
+            if (html) {
+              if (${isDark}) {
+                html.setAttribute('dark', '');
+              } else {
+                html.removeAttribute('dark');
+              }
             }
-          }
-        })()
-      `).catch(() => {})
-    }, 2500)
+          })()
+        `).catch(() => {})
+      }, 2500)
+    }
   })
 
   return ytmView
@@ -286,6 +315,39 @@ export function registerYTMHandlers(
         }
       })()
     `).catch(() => {})
+  })
+
+  // Dedicated Google Login Window for YTM
+  ipc.handle('ytm:openLogin', async () => {
+    const loginWin = new BrowserWindow({
+      width: 520,
+      height: 720,
+      parent: mainWindow,
+      modal: true,
+      title: 'Sign In to YouTube Music',
+      autoHideMenuBar: true,
+      webPreferences: {
+        partition: 'persist:ytm',
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    const cleanUA = getCleanChromeUA()
+    loginWin.webContents.setUserAgent(cleanUA)
+    loginWin.webContents.on('did-navigate', (_, url) => {
+      if (url.startsWith('https://music.youtube.com') && !url.includes('accounts.google.com') && !url.includes('signin')) {
+        loginWin.close()
+        if (ytmView) ytmView.webContents.loadURL('https://music.youtube.com')
+      }
+    })
+    await loginWin.loadURL('https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fmusic.youtube.com%2F')
+  })
+
+  // Clear Session & Cache
+  ipc.handle('ytm:clearSession', async () => {
+    const ses = session.fromPartition('persist:ytm')
+    await ses.clearStorageData()
+    if (ytmView) ytmView.webContents.loadURL('https://music.youtube.com')
   })
 
   // Dev tools for YTM debugging

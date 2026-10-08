@@ -35,10 +35,13 @@ app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('ignore-gpu-blocklist') // Force GPU on Linux even if driver is unrecognized
 app.commandLine.appendSwitch('log-level', '3') // Suppress internal Chromium/VSync errors/warnings
-app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint') // Bypass Google Sign-In blocking
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
 }
+
+const baseUA = app.userAgentFallback || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+app.userAgentFallback = baseUA.replace(/Electron\/[0-9\.]+\s?/, '').replace(/Yukinon\/[0-9\.]+\s?/, '').trim()
 
 async function createWindow(): Promise<void> {
   await initDatabase()

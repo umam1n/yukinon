@@ -87,6 +87,8 @@ const api = {
     setLock: (isLocked: boolean) => ipcRenderer.invoke('ytm:setLock', isLocked),
     setTheme: (accent: string, mode: string) => ipcRenderer.invoke('ytm:setTheme', accent, mode),
     seek: (pos: number) => ipcRenderer.invoke('ytm:seek', pos),
+    openLogin: () => ipcRenderer.invoke('ytm:openLogin'),
+    clearSession: () => ipcRenderer.invoke('ytm:clearSession'),
     onStateUpdate: (callback: (state: any) => void) => {
       ipcRenderer.on('ytm:state-update', (_event, state) => callback(state))
       return () => ipcRenderer.removeAllListeners('ytm:state-update')

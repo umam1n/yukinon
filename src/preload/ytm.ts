@@ -1,10 +1,9 @@
 import { ipcRenderer } from 'electron'
 
-// Preload script for the YouTube Music BrowserView
-// Runs in YTM's context with isolated world.
-
-let lockedVolume = 0.8
-let lastState = {}
+// Guard against executing in non-YouTube domains (such as Google login windows if partition is shared)
+if (window.location.hostname.includes('youtube.com')) {
+  let lockedVolume = 0.8
+  let lastState = {}
 
 // NOTE: playbackLock is now stored as window.__yukinonLocalLock,
 // set directly by executeJavaScript from the main process for zero latency.
@@ -128,3 +127,4 @@ ipcRenderer.on('ytm:set-volume', (_, vol: number) => {
   const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
   if (video) video.volume = vol
 })
+}

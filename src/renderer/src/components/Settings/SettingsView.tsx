@@ -18,7 +18,8 @@ import {
   Key,
   CheckCircle2,
   AlertCircle,
-  Wand2
+  Wand2,
+  Youtube
 } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 
@@ -392,6 +393,89 @@ export default function SettingsView(): React.ReactElement {
                     }}
                   />
                 </SettingRow>
+
+                {/* YouTube Music Card */}
+                <div
+                  style={{
+                    margin: '8px 16px 16px 16px',
+                    padding: '14px 16px',
+                    borderRadius: 8,
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Youtube size={16} style={{ color: 'var(--color-accent)' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                      YouTube Music Authentication
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                    Launches a verified Google authorization session with automated bot-detection bypass. Once signed in, your YouTube Music library, playlists, and recommendations sync automatically.
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await window.yukinon.ytm.openLogin()
+                          setNotification({ message: 'Google Sign-In window opened.', type: 'success' })
+                          setTimeout(() => setNotification(null), 3000)
+                        } catch (err: any) {
+                          setNotification({ message: err?.message || 'Failed to open login window', type: 'error' })
+                          setTimeout(() => setNotification(null), 4000)
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '7px 14px',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: 'var(--color-accent)',
+                        color: '#fff',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <ShieldCheck size={14} />
+                      Sign In to YouTube Music
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await window.yukinon.ytm.clearSession()
+                          setNotification({ message: 'YouTube Music session and cache reset successfully.', type: 'success' })
+                          setTimeout(() => setNotification(null), 3000)
+                        } catch (err: any) {
+                          setNotification({ message: err?.message || 'Failed to reset session', type: 'error' })
+                          setTimeout(() => setNotification(null), 4000)
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '7px 14px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RefreshCw size={13} />
+                      Reset YTM Session & Cache
+                    </button>
+                  </div>
+                </div>
+
                 <SettingRow label="Internet Radio" description="Stream worldwide radio stations">
                   <Toggle
                     checked={activeModules.radio}
