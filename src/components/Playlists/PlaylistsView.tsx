@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useApp } from '../../store/AppContext'
 import { ListMusic, Plus, Trash2, Play, Shuffle, Disc, X } from 'lucide-react'
 import type { Track } from '@shared/types'
+import TrackList from '../Library/TrackList'
 
 export default function PlaylistsView(): React.ReactElement {
   const { play, setQueue, confirm } = useApp()
@@ -151,119 +152,89 @@ export default function PlaylistsView(): React.ReactElement {
 
       {/* Main Content: Detail View */}
       <div 
-        className={`flex-1 overflow-y-auto ${
+        className={`flex-1 overflow-hidden ${
           activePlaylistId ? 'flex flex-col' : 'hidden md:flex flex-col'
         }`}
       >
         {activePlaylist ? (
-          <div className="p-6 md:p-8 flex flex-col flex-1">
-            {/* Back button on mobile */}
-            <button 
-              onClick={() => setActivePlaylistId(null)}
-              className="md:hidden mb-4 text-xs font-semibold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white self-start flex items-center gap-2"
-            >
-              ← Back to Playlists
-            </button>
+          <div className="flex flex-col flex-1 h-full overflow-hidden">
+            {/* Header */}
+            <div className="p-6 md:p-8 pb-4 flex-shrink-0">
+              {/* Back button on mobile */}
+              <button 
+                onClick={() => setActivePlaylistId(null)}
+                className="md:hidden mb-4 text-xs font-semibold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white self-start flex items-center gap-2"
+              >
+                ← Back to Playlists
+              </button>
 
-            <div className="flex md:flex-row flex-col md:items-end gap-6 mb-8">
-              <div style={{ width: 120, height: 120, borderRadius: 12, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }} className="flex-shrink-0 mx-auto md:mx-0">
-                {tracks.length > 0 && tracks[0].artwork ? (
-                  <img src={tracks[0].artwork} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
-                ) : (
-                  <ListMusic size={48} color="var(--text-muted)" />
-                )}
-              </div>
-              <div className="text-center md:text-left">
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Playlist</div>
-                <h1 className="text-2xl md:text-4xl font-extrabold mb-4 leading-tight">{activePlaylist.name}</h1>
-                <div className="flex items-center justify-center md:justify-start gap-3">
-                  <button
-                    onClick={() => handlePlayAll(false)}
-                    disabled={tracks.length === 0}
-                    style={{
-                      background: 'var(--color-accent)',
-                      color: 'black',
-                      border: 'none',
-                      borderRadius: 24,
-                      padding: '10px 20px',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: tracks.length ? 'pointer' : 'not-allowed',
-                      opacity: tracks.length ? 1 : 0.5,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6
-                    }}
-                  >
-                    <Play size={16} fill="currentColor" /> Play
-                  </button>
-                  <button
-                    onClick={() => handlePlayAll(true)}
-                    disabled={tracks.length === 0}
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      color: 'var(--text)',
-                      border: 'none',
-                      borderRadius: 24,
-                      padding: '10px 20px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: tracks.length ? 'pointer' : 'not-allowed',
-                      opacity: tracks.length ? 1 : 0.5,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6
-                    }}
-                  >
-                    <Shuffle size={16} /> Shuffle
-                  </button>
+              <div className="flex md:flex-row flex-col md:items-end gap-6 mb-4">
+                <div style={{ width: 120, height: 120, borderRadius: 12, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }} className="flex-shrink-0 mx-auto md:mx-0">
+                  {tracks.length > 0 && tracks[0].artwork ? (
+                    <img src={tracks[0].artwork} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
+                  ) : (
+                    <ListMusic size={48} color="var(--text-muted)" />
+                  )}
+                </div>
+                <div className="text-center md:text-left">
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Playlist</div>
+                  <h1 className="text-2xl md:text-4xl font-extrabold mb-4 leading-tight">{activePlaylist.name}</h1>
+                  <div className="flex items-center justify-center md:justify-start gap-3">
+                    <button
+                      onClick={() => handlePlayAll(false)}
+                      disabled={tracks.length === 0}
+                      style={{
+                        background: 'var(--color-accent)',
+                        color: 'black',
+                        border: 'none',
+                        borderRadius: 24,
+                        padding: '10px 20px',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: tracks.length ? 'pointer' : 'not-allowed',
+                        opacity: tracks.length ? 1 : 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Play size={16} fill="currentColor" /> Play
+                    </button>
+                    <button
+                      onClick={() => handlePlayAll(true)}
+                      disabled={tracks.length === 0}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'var(--text)',
+                        border: 'none',
+                        borderRadius: 24,
+                        padding: '10px 20px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: tracks.length ? 'pointer' : 'not-allowed',
+                        opacity: tracks.length ? 1 : 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Shuffle size={16} /> Shuffle
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {tracks.length > 0 ? (
-              <div className="flex flex-col gap-1 flex-1">
-                {tracks.map((track, idx) => (
-                  <div
-                    key={track.playlistTrackId}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '40px 1fr auto',
-                      gap: 12,
-                      padding: '10px 12px',
-                      alignItems: 'center',
-                      borderRadius: 10,
-                      background: 'rgba(255,255,255,0.02)',
-                      marginBottom: 4
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', fontFamily: 'monospace' }}>{idx + 1}</div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.artist} · <span style={{ textTransform: 'capitalize' }}>{track.source}</span></div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <button
-                        onClick={() => handlePlayTrack(idx)}
-                        style={{ background: 'var(--color-accent)', color: 'black', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        Play
-                      </button>
-                      <button
-                        onClick={() => handleRemoveTrack(track.playlistTrackId)}
-                        style={{ background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', padding: 6 }}
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-dim)', fontSize: 13 }}>
-                This playlist is empty. Add songs from your library or integrations.
-              </div>
-            )}
+            {/* Virtualized Responsive TrackList */}
+            <div className="flex-1 overflow-hidden">
+              {tracks.length > 0 ? (
+                <TrackList tracks={tracks} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-dim)', fontSize: 13 }}>
+                  This playlist is empty. Add songs from your library or integrations.
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)' }}>
