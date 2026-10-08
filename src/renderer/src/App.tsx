@@ -13,12 +13,13 @@ import RadioView from './components/Radio/RadioView'
 import SubsonicView from './components/Subsonic/SubsonicView'
 import JellyfinView from './components/Jellyfin/JellyfinView'
 import { useApp } from './store/AppContext'
+import MiniPlayerHUD from './components/MiniPlayer/MiniPlayerHUD'
 
 import FullscreenPlayer from './components/FullscreenPlayer'
 
 // Inner app component that has access to context
 function AppInner(): React.ReactElement {
-  const { activeView, setActiveView, player, togglePlayPause, seekTo, setVolume, notification } = useApp()
+  const { activeView, setActiveView, player, togglePlayPause, seekTo, setVolume, notification, isMiniPlayer } = useApp()
   const showTitleBar = window.yukinon.platform === 'darwin'
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -69,6 +70,10 @@ function AppInner(): React.ReactElement {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeView, setActiveView, togglePlayPause, seekTo, setVolume, player.position, player.duration, player.volume])
+
+  if (isMiniPlayer) {
+    return <MiniPlayerHUD />
+  }
 
   return (
     <div

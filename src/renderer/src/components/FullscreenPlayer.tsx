@@ -42,6 +42,31 @@ export default function FullscreenPlayer(): React.ReactElement {
   const lyricsContainerRef = React.useRef<HTMLDivElement>(null)
   const activeLyricRef = React.useRef<HTMLDivElement>(null)
 
+  const [lyricsOffset, setLyricsOffset] = useState<number>(() => {
+    if (typeof window === 'undefined' || !player.currentTrackId) return 0
+    const saved = localStorage.getItem(`lyrics_offset_${player.currentTrackId}`)
+    return saved ? parseFloat(saved) || 0 : 0
+  })
+
+  React.useEffect(() => {
+    if (!player.currentTrackId) {
+      setLyricsOffset(0)
+      return
+    }
+    const saved = localStorage.getItem(`lyrics_offset_${player.currentTrackId}`)
+    setLyricsOffset(saved ? parseFloat(saved) || 0 : 0)
+  }, [player.currentTrackId])
+
+  const updateLyricsOffset = (newOffset: number) => {
+    const rounded = Math.round(newOffset * 10) / 10
+    setLyricsOffset(rounded)
+    if (player.currentTrackId) {
+      localStorage.setItem(`lyrics_offset_${player.currentTrackId}`, rounded.toString())
+    }
+  }
+
+  const effectiveTime = Math.max(0, player.position + lyricsOffset)
+
   const title = player.source === 'ytm' ? player.ytmInfo?.title || 'YouTube Music' : player.source === 'radio' ? player.radioInfo?.title || 'Internet Radio' : player.source === 'subsonic' ? player.subsonicInfo?.title || 'Navidrome' : player.source === 'jellyfin' ? player.jellyfinInfo?.title || 'Jellyfin' : currentTrack?.title || 'Nothing playing'
   const artist = player.source === 'ytm' ? player.ytmInfo?.artist || '' : player.source === 'radio' ? player.radioInfo?.station || '' : player.source === 'subsonic' ? player.subsonicInfo?.artist || '' : player.source === 'jellyfin' ? player.jellyfinInfo?.artist || '' : currentTrack?.artist || '—'
   const artwork = player.artwork
@@ -74,7 +99,7 @@ export default function FullscreenPlayer(): React.ReactElement {
     if (showLyrics && !isPlainLyrics && activeLyricRef.current && lyricsContainerRef.current) {
       activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-  }, [player.position, showLyrics, isPlainLyrics])
+  }, [effectiveTime, showLyrics, isPlainLyrics])
 
   const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setDragPosition(Number(e.target.value))
@@ -118,7 +143,7 @@ export default function FullscreenPlayer(): React.ReactElement {
   let activeLyricIndex = -1
   if (!isPlainLyrics && lyrics.length > 0) {
     for (let i = 0; i < lyrics.length; i++) {
-      if (player.position >= lyrics[i].time) {
+      if (effectiveTime >= lyrics[i].time) {
         activeLyricIndex = i
       } else {
         break
@@ -393,8 +418,63 @@ export default function FullscreenPlayer(): React.ReactElement {
             transition: 'opacity 0.3s ease', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             display: 'flex', flexDirection: 'column'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Lyrics</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Lyrics</h2>
+                {!isPlainLyrics && lyrics.length > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    background: 'rgba(255,255,255,0.08)',
+                    borderRadius: 16,
+                    fontSize: 12
+                  }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Sync:</span>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset - 0.5)}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                      title="Shift backward 0.5s"
+                    >
+                      -0.5s
+                    </button>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset - 0.1)}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                      title="Shift backward 0.1s"
+                    >
+                      -0.1s
+                    </button>
+                    <span style={{ minWidth: 50, textAlign: 'center', fontWeight: 600, color: lyricsOffset === 0 ? 'var(--text-muted)' : 'var(--color-accent)' }}>
+                      {lyricsOffset > 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}
+                    </span>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset + 0.1)}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                      title="Shift forward 0.1s"
+                    >
+                      +0.1s
+                    </button>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset + 0.5)}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                      title="Shift forward 0.5s"
+                    >
+                      +0.5s
+                    </button>
+                    {lyricsOffset !== 0 && (
+                      <button
+                        onClick={() => updateLyricsOffset(0)}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-dim)', padding: '2px 4px', cursor: 'pointer', fontSize: 11, textDecoration: 'underline' }}
+                        title="Reset offset"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               <button 
                 onClick={() => setShowLyrics(false)}
                 style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text)', padding: '6px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 14 }}

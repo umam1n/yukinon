@@ -20,9 +20,12 @@
     "@jellyfin/sdk": "^0.9.0",
     "@supabase/supabase-js": "^2.46.1",
     "better-sqlite3": "^11.5.0",
+    "chokidar": "^5.0.0",
     "cross-fetch": "^4.0.0",
+    "flac-tagger": "^2.0.0",
     "howler": "^2.2.4",
-    "music-metadata": "^10.5.0"
+    "music-metadata": "^10.5.0",
+    "node-id3": "^0.2.9"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",

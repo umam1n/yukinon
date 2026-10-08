@@ -113,11 +113,22 @@ export interface PlayerState {
   repeat: 'off' | 'all' | 'one'
 }
 
+export interface TagUpdatePayload {
+  title?: string
+  artist?: string
+  album?: string
+  albumArtist?: string
+  year?: number
+  genre?: string
+  trackNumber?: number
+}
+
 export type IpcChannels =
   | 'library:scan'
   | 'library:getTracks'
   | 'library:getTrack'
   | 'library:getTrackArtwork'
+  | 'library:updateTags'
   | 'playback:play'
   | 'playback:pause'
   | 'playback:stop'
@@ -143,3 +154,6 @@ export type IpcChannels =
   | 'ytm:seek'
   | 'theme:get'
   | 'theme:set'
+  | 'window:enterMiniPlayer'
+  | 'window:exitMiniPlayer'
+  | 'window:isMiniPlayer'

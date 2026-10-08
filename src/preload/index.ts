@@ -11,7 +11,10 @@ const api = {
     setGlobalHotkeys: (enabled: boolean) => ipcRenderer.invoke('window:setGlobalHotkeys', enabled),
     getGlobalHotkeys: () => ipcRenderer.invoke('window:getGlobalHotkeys'),
     setCustomHotkeys: (hotkeys: any) => ipcRenderer.invoke('window:setCustomHotkeys', hotkeys),
-    getCustomHotkeys: () => ipcRenderer.invoke('window:getCustomHotkeys')
+    getCustomHotkeys: () => ipcRenderer.invoke('window:getCustomHotkeys'),
+    enterMiniPlayer: () => ipcRenderer.invoke('window:enterMiniPlayer'),
+    exitMiniPlayer: () => ipcRenderer.invoke('window:exitMiniPlayer'),
+    isMiniPlayer: () => ipcRenderer.invoke('window:isMiniPlayer')
   },
 
   // Library
@@ -26,7 +29,23 @@ const api = {
     getFolders: () => ipcRenderer.invoke('library:getFolders'),
     removeFolder: (folderPath: string) => ipcRenderer.invoke('library:removeFolder', folderPath),
     findDuplicates: () => ipcRenderer.invoke('library:findDuplicates'),
-    removeDuplicates: () => ipcRenderer.invoke('library:removeDuplicates')
+    removeDuplicates: () => ipcRenderer.invoke('library:removeDuplicates'),
+    updateTags: (id: string, tags: any) => ipcRenderer.invoke('library:updateTags', { id, tags }),
+    onChanged: (callback: () => void) => {
+      const sub = () => callback()
+      ipcRenderer.on('library:changed', sub)
+      return () => ipcRenderer.removeListener('library:changed', sub)
+    },
+    onTrackAdded: (callback: (track: any) => void) => {
+      const sub = (_: Electron.IpcRendererEvent, track: any) => callback(track)
+      ipcRenderer.on('library:trackAdded', sub)
+      return () => ipcRenderer.removeListener('library:trackAdded', sub)
+    },
+    onTrackRemoved: (callback: (filePath: string) => void) => {
+      const sub = (_: Electron.IpcRendererEvent, filePath: string) => callback(filePath)
+      ipcRenderer.on('library:trackRemoved', sub)
+      return () => ipcRenderer.removeListener('library:trackRemoved', sub)
+    }
   },
 
   // Playlists

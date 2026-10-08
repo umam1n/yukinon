@@ -3,11 +3,14 @@ import { readdir, mkdir, writeFile, readFile } from 'fs/promises'
 import { join, extname } from 'path'
 import { parseFile } from 'music-metadata'
 import { randomUUID } from 'crypto'
+import NodeID3 from 'node-id3'
+import { readFlacTags, writeFlacTags } from 'flac-tagger'
 import { getDb, getSetting, setSetting } from '../db'
-import type { Track } from '../../../shared/types'
+import type { Track, TagUpdatePayload } from '../../../shared/types'
 import { existsSync } from 'fs'
 import { classifyTrack } from '../lib/classifier'
 import { clusterDuplicateTracks } from '../lib/duplicates'
+import { updateWatchedFolders } from '../watcher'
 
 const SUPPORTED_FORMATS = new Set(['.flac', '.mp3', '.wav', '.aiff', '.aac', '.ogg', '.m4a', '.opus'])
 
@@ -30,7 +33,7 @@ async function scanDirectory(dirPath: string): Promise<string[]> {
   return files
 }
 
-async function indexTrack(filePath: string): Promise<Track | null> {
+export async function indexTrack(filePath: string): Promise<Track | null> {
   try {
     const renderArtSetting = getSetting('render_album_art')
     const skipCovers = renderArtSetting === 0 || renderArtSetting === false || renderArtSetting === '0'
@@ -173,6 +176,7 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
     if (!savedFolders.includes(folderPath)) {
       savedFolders.push(folderPath)
       setSetting('music_folders', savedFolders)
+      updateWatchedFolders(savedFolders)
     }
 
     return { added: added.length, total: files.length }
@@ -229,6 +233,77 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
   // Delete track from library
   ipc.handle('library:removeTrack', (_, id: string) => {
     db.prepare('DELETE FROM tracks WHERE id = ?').run(id)
+  })
+
+  // Update track tags on audio file and SQLite database
+  ipc.handle('library:updateTags', async (_, { id, tags }: { id: string; tags: TagUpdatePayload }) => {
+    const track = db.prepare('SELECT * FROM tracks WHERE id = ?').get(id) as any
+    if (!track) {
+      throw new Error(`Track with id ${id} not found`)
+    }
+
+    const filePath = track.path
+    if (filePath && existsSync(filePath)) {
+      const ext = extname(filePath).toLowerCase()
+      try {
+        if (ext === '.mp3') {
+          const id3Tags: NodeID3.Tags = {}
+          if (tags.title !== undefined) id3Tags.title = tags.title
+          if (tags.artist !== undefined) id3Tags.artist = tags.artist
+          if (tags.album !== undefined) id3Tags.album = tags.album
+          if (tags.albumArtist !== undefined) id3Tags.performerInfo = tags.albumArtist
+          if (tags.year !== undefined) id3Tags.year = String(tags.year)
+          if (tags.genre !== undefined) id3Tags.genre = tags.genre
+          if (tags.trackNumber !== undefined) id3Tags.trackNumber = String(tags.trackNumber)
+
+          NodeID3.update(id3Tags, filePath)
+        } else if (ext === '.flac') {
+          const existingFlac = await readFlacTags(filePath)
+          const tagMap: Record<string, string | string[]> = { ...existingFlac.tagMap }
+          if (tags.title !== undefined) tagMap.TITLE = tags.title
+          if (tags.artist !== undefined) tagMap.ARTIST = tags.artist
+          if (tags.album !== undefined) tagMap.ALBUM = tags.album
+          if (tags.albumArtist !== undefined) tagMap.ALBUMARTIST = tags.albumArtist
+          if (tags.year !== undefined) tagMap.DATE = String(tags.year)
+          if (tags.genre !== undefined) tagMap.GENRE = tags.genre
+          if (tags.trackNumber !== undefined) tagMap.TRACKNUMBER = String(tags.trackNumber)
+
+          await writeFlacTags({ tagMap, picture: existingFlac.picture }, filePath)
+        }
+      } catch (tagErr) {
+        console.error('[Library] Failed to write tags to file:', filePath, tagErr)
+      }
+    }
+
+    const updatedTitle = tags.title !== undefined ? tags.title : track.title
+    const updatedArtist = tags.artist !== undefined ? tags.artist : track.artist
+    const updatedAlbum = tags.album !== undefined ? tags.album : track.album
+    const updatedAlbumArtist = tags.albumArtist !== undefined ? tags.albumArtist : track.album_artist
+    const updatedYear = tags.year !== undefined ? tags.year : track.year
+    const updatedGenre = tags.genre !== undefined ? tags.genre : track.genre
+
+    db.prepare(`
+      UPDATE tracks
+      SET title = ?, artist = ?, album = ?, album_artist = ?, year = ?, genre = ?
+      WHERE id = ?
+    `).run(updatedTitle, updatedArtist, updatedAlbum, updatedAlbumArtist, updatedYear, updatedGenre, id)
+
+    const row = db.prepare(`
+      SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
+             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
+             play_count as playCount, is_favorite as isFavorite,
+             content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
+             mood, ai_tags as aiTags,
+             replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
+      FROM tracks WHERE id = ?
+    `).get(id) as any
+
+    return {
+      ...row,
+      isInstrumental: Boolean(row.isInstrumental),
+      isLive: Boolean(row.isLive),
+      aiTags: row.aiTags ? JSON.parse(row.aiTags) : []
+    } as Track
   })
 
   // Get lyrics: sidecar .lrc or embedded tags
@@ -297,7 +372,9 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
   ipc.handle('library:removeFolder', (_, folderPath: string) => {
     db.prepare('DELETE FROM tracks WHERE path LIKE ?').run(`${folderPath}%`)
     const folders = (getSetting('music_folders') as string[]) || []
-    setSetting('music_folders', folders.filter((f) => f !== folderPath))
+    const updated = folders.filter((f) => f !== folderPath)
+    setSetting('music_folders', updated)
+    updateWatchedFolders(updated)
   })
 
   // Open native directory selection dialog

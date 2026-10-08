@@ -12,6 +12,7 @@ import { registerThemeHandlers } from './ipc/theme'
 import { registerAiHandlers } from './ipc/ai'
 import { registerYTMHandlers, ytmView } from './ytm'
 import { initDatabase, getSetting, setSetting } from './db'
+import { initLibraryWatcher } from './watcher'
 import crypto from 'crypto'
 
 const AUDIO_MIME_TYPES: Record<string, string> = {
@@ -26,6 +27,8 @@ const AUDIO_MIME_TYPES: Record<string, string> = {
 }
 
 let mainWindow: BrowserWindow
+let isMiniPlayer = false
+let normalBounds = { x: 0, y: 0, width: 1400, height: 900 }
 
 // Hardware Acceleration is critical for CSS performance (blur, gradients, transform)
 // app.disableHardwareAcceleration()
@@ -69,12 +72,15 @@ async function createWindow(): Promise<void> {
     alwaysOnTop: !!getSetting('always_on_top')
   })
 
+  initLibraryWatcher(mainWindow)
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
     mainWindow.focus()
   })
 
   mainWindow.on('resize', () => {
+    if (isMiniPlayer) return
     const [w, h] = mainWindow.getContentSize()
     // If YTM is active, update its bounds to fill content area (minus sidebar)
     if (ytmView && mainWindow.getBrowserViews().includes(ytmView)) {
@@ -265,6 +271,30 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.handle('window:close', () => mainWindow.close())
+  ipcMain.handle('window:isMiniPlayer', () => isMiniPlayer)
+  ipcMain.handle('window:enterMiniPlayer', () => {
+    if (isMiniPlayer) return true
+    normalBounds = mainWindow.getBounds()
+    isMiniPlayer = true
+    mainWindow.setMinimumSize(320, 140)
+    mainWindow.setBounds({
+      x: normalBounds.x,
+      y: normalBounds.y,
+      width: 340,
+      height: 140
+    })
+    mainWindow.setAlwaysOnTop(true, 'floating')
+    return true
+  })
+  ipcMain.handle('window:exitMiniPlayer', () => {
+    if (!isMiniPlayer) return false
+    isMiniPlayer = false
+    mainWindow.setMinimumSize(360, 260)
+    mainWindow.setBounds(normalBounds)
+    const alwaysOnTopSetting = !!getSetting('always_on_top')
+    mainWindow.setAlwaysOnTop(alwaysOnTopSetting)
+    return false
+  })
   ipcMain.handle('window:setAlwaysOnTop', (_, isAlwaysOnTop: boolean) => {
     mainWindow.setAlwaysOnTop(isAlwaysOnTop)
     setSetting('always_on_top', isAlwaysOnTop ? 1 : 0)

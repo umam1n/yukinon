@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Music2, Shuffle, Repeat, Sparkles, Repeat1
+  Music2, Shuffle, Repeat, Sparkles, Repeat1, PictureInPicture2
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
 import type { Track } from '../../../../../shared/types'
@@ -14,7 +14,7 @@ function formatTime(secs: number): string {
 }
 
 export default function NowPlaying(): React.ReactElement {
-  const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, setVolume, shuffle, repeat, toggleShuffle, toggleRepeat, isSmartPlay, toggleSmartPlay, setActiveView, renderAlbumArt } = useApp()
+  const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, setVolume, shuffle, repeat, toggleShuffle, toggleRepeat, isSmartPlay, toggleSmartPlay, setActiveView, renderAlbumArt, toggleMiniPlayer } = useApp()
   const [isMuted, setIsMuted] = useState(false)
   const prevVolumeRef = useRef(player.volume > 0 ? player.volume : 0.5)
   const [dragPosition, setDragPosition] = useState<number | null>(null)
@@ -344,6 +344,25 @@ export default function NowPlaying(): React.ReactElement {
             cursor: 'pointer'
           }}
         />
+        <button
+          onClick={toggleMiniPlayer}
+          title="Mini Player"
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-muted)',
+            padding: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 4
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+        >
+          <PictureInPicture2 size={16} />
+        </button>
       </div>
     </div>
   )

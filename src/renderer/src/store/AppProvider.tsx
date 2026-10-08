@@ -43,6 +43,26 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [isSmartPlay, setIsSmartPlay] = useState(false)
   const [activeModules, setActiveModulesState] = useState({ ytm: false, radio: false, subsonic: false, jellyfin: false })
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [isMiniPlayer, setIsMiniPlayer] = useState(false)
+
+  useEffect(() => {
+    yukinon.window?.isMiniPlayer?.().then((mini: boolean) => {
+      if (typeof mini === 'boolean') {
+        setIsMiniPlayer(mini)
+      }
+    })
+  }, [])
+
+  const toggleMiniPlayer = useCallback(async () => {
+    if (!yukinon.window) return
+    if (isMiniPlayer) {
+      await yukinon.window.exitMiniPlayer?.()
+      setIsMiniPlayer(false)
+    } else {
+      await yukinon.window.enterMiniPlayer?.()
+      setIsMiniPlayer(true)
+    }
+  }, [isMiniPlayer])
 
   const [renderAlbumArt, setRenderAlbumArtState] = useState(true)
   const [reduceBlur, setReduceBlurState] = useState(false)
@@ -474,6 +494,9 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     })
 
     yukinon.library.getTracks().then(setTracks)
+    const unsubLibraryChanged = yukinon.library.onChanged?.(() => {
+      yukinon.library.getTracks().then(setTracks)
+    })
 
     Promise.all([yukinon.eq.getBands(), yukinon.eq.getPresets(), yukinon.eq.getActivePresetId()]).then(
       ([bands, presets, presetId]) => {
@@ -503,6 +526,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     const unsubPrev = yukinon.media.onPrev(playPrev)
 
     return () => {
+      unsubLibraryChanged?.()
       unsubLocal()
       unsubYTM()
       unsubRadio()
@@ -595,6 +619,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         setReplayGainEnabled,
         replaygainPreamp,
         setReplayGainPreamp,
+        isMiniPlayer,
+        toggleMiniPlayer,
         notification,
         notify
       }}

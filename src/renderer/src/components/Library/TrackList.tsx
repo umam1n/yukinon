@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../../store/AppContext'
-import { Music2, PlusCircle, ListPlus, ListEnd, ArrowUp, ArrowDown, Play, Trash2 } from 'lucide-react'
+import { Music2, PlusCircle, ListPlus, ListEnd, ArrowUp, ArrowDown, Play, Trash2, Pencil } from 'lucide-react'
 import type { Track } from '../../../../../../shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
+import EditMetadataModal from './EditMetadataModal'
 import { calculateVirtualWindow } from '../../lib/virtualList'
 
 function formatDuration(secs: number): string {
@@ -34,6 +35,7 @@ export default function TrackList({
 }): React.ReactElement {
   const { setQueue, player, removeFromQueue, playNextTrack, addToQueue } = useApp()
   const [trackToPlaylist, setTrackToPlaylist] = useState<Track | null>(null)
+  const [trackToEdit, setTrackToEdit] = useState<Track | null>(null)
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
@@ -515,6 +517,32 @@ export default function TrackList({
               >
                 <PlusCircle size={16} />
               </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setTrackToEdit(track)
+                }}
+                title="Edit Metadata"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-dim)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'var(--text)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--text-dim)'
+                }}
+              >
+                <Pencil size={15} />
+              </button>
               {isQueueView && (
                 <button
                   onClick={(e) => {
@@ -644,6 +672,24 @@ export default function TrackList({
             <PlusCircle size={14} />
             <span>Add to Playlist</span>
           </button>
+          <button
+            onClick={() => {
+              setTrackToEdit(contextMenu.track)
+              setContextMenu(null)
+            }}
+            style={contextItemStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(var(--color-accent-rgb), 0.12)'
+              e.currentTarget.style.color = 'var(--color-accent)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = 'var(--text)'
+            }}
+          >
+            <Pencil size={14} />
+            <span>Edit Metadata</span>
+          </button>
           {isQueueView && (
             <>
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
@@ -669,6 +715,7 @@ export default function TrackList({
       )}
 
       <AddToPlaylistModal track={trackToPlaylist} onClose={() => setTrackToPlaylist(null)} />
+      <EditMetadataModal track={trackToEdit} onClose={() => setTrackToEdit(null)} />
     </div>
   )
 }

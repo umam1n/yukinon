@@ -1,7 +1,10 @@
 import React from 'react'
-import { Minus, Square, X } from 'lucide-react'
+import { Minus, Square, X, PictureInPicture2 } from 'lucide-react'
+import { useApp } from '../store/AppContext'
 
 export default function TitleBar(): React.ReactElement {
+  const { toggleMiniPlayer } = useApp()
+
   return (
     <div
       className="flex items-center justify-between px-4"
@@ -24,6 +27,14 @@ export default function TitleBar(): React.ReactElement {
 
       {/* Window controls */}
       <div className="flex items-center gap-1 no-drag">
+        <button
+          onClick={toggleMiniPlayer}
+          className="w-8 h-8 flex items-center justify-center rounded-md transition-all hover:bg-white/10"
+          style={{ color: 'var(--text-muted)' }}
+          title="Mini Player"
+        >
+          <PictureInPicture2 size={13} />
+        </button>
         <button
           onClick={() => window.yukinon.window.minimize()}
           className="w-8 h-8 flex items-center justify-center rounded-md transition-all hover:bg-white/10"

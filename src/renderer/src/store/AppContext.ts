@@ -64,6 +64,10 @@ export interface AppContextType {
   replaygainPreamp: number
   setReplayGainPreamp: (preamp: number) => void
 
+  // Mini Player
+  isMiniPlayer: boolean
+  toggleMiniPlayer: () => Promise<void>
+
   // Notifications
   notification: { message: string; type: 'success' | 'error' } | null
   notify: (message: string, type: 'success' | 'error') => void
