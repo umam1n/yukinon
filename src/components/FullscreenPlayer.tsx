@@ -90,6 +90,31 @@ export default function FullscreenPlayer(): React.ReactElement {
   const lyricsContainerRef = useRef<HTMLDivElement>(null)
   const activeLyricRef = useRef<HTMLDivElement>(null)
 
+  const [lyricsOffset, setLyricsOffset] = useState<number>(() => {
+    if (typeof window === 'undefined' || !player.currentTrackId) return 0
+    const saved = localStorage.getItem(`lyrics_offset_${player.currentTrackId}`)
+    return saved ? parseFloat(saved) || 0 : 0
+  })
+
+  useEffect(() => {
+    if (!player.currentTrackId) {
+      setLyricsOffset(0)
+      return
+    }
+    const saved = localStorage.getItem(`lyrics_offset_${player.currentTrackId}`)
+    setLyricsOffset(saved ? parseFloat(saved) || 0 : 0)
+  }, [player.currentTrackId])
+
+  const updateLyricsOffset = (newOffset: number) => {
+    const rounded = Math.round(newOffset * 10) / 10
+    setLyricsOffset(rounded)
+    if (player.currentTrackId) {
+      localStorage.setItem(`lyrics_offset_${player.currentTrackId}`, rounded.toString())
+    }
+  }
+
+  const effectiveTime = Math.max(0, player.position + lyricsOffset)
+
   const title =
     player.source === 'ytm'
       ? player.ytmInfo?.title || 'YouTube Music'
@@ -145,7 +170,7 @@ export default function FullscreenPlayer(): React.ReactElement {
     if (showLyrics && !isPlainLyrics && activeLyricRef.current && lyricsContainerRef.current) {
       activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-  }, [player.position, showLyrics, isPlainLyrics])
+  }, [effectiveTime, showLyrics, isPlainLyrics])
 
   const handleSeekChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setDragPosition(Number(e.target.value))
@@ -194,7 +219,7 @@ export default function FullscreenPlayer(): React.ReactElement {
   let activeLyricIndex = -1
   if (!isPlainLyrics && lyrics.length > 0) {
     for (let i = 0; i < lyrics.length; i++) {
-      if (player.position >= lyrics[i].time) {
+      if (effectiveTime >= lyrics[i].time) {
         activeLyricIndex = i
       } else {
         break
@@ -455,10 +480,64 @@ export default function FullscreenPlayer(): React.ReactElement {
             }}
             className="w-full h-full"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg md:text-xl font-bold m-0" style={{ color: 'var(--text)' }}>
-                Lyrics
-              </h2>
+            <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg md:text-xl font-bold m-0" style={{ color: 'var(--text)' }}>
+                  Lyrics
+                </h2>
+                {!isPlainLyrics && lyrics.length > 0 && (
+                  <div
+                    style={{
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border)'
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                  >
+                    <span style={{ color: 'var(--text-dim)' }} className="text-[10px]">Sync:</span>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset - 0.5)}
+                      className="px-1.5 py-0.5 rounded bg-white/10 text-[10px]"
+                    >
+                      -0.5s
+                    </button>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset - 0.1)}
+                      className="px-1.5 py-0.5 rounded bg-white/10 text-[10px]"
+                    >
+                      -0.1s
+                    </button>
+                    <span
+                      style={{
+                        color: lyricsOffset === 0 ? 'var(--text-dim)' : 'var(--color-accent)'
+                      }}
+                      className="min-w-[38px] text-center font-semibold text-[11px]"
+                    >
+                      {lyricsOffset > 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}
+                    </span>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset + 0.1)}
+                      className="px-1.5 py-0.5 rounded bg-white/10 text-[10px]"
+                    >
+                      +0.1s
+                    </button>
+                    <button
+                      onClick={() => updateLyricsOffset(lyricsOffset + 0.5)}
+                      className="px-1.5 py-0.5 rounded bg-white/10 text-[10px]"
+                    >
+                      +0.5s
+                    </button>
+                    {lyricsOffset !== 0 && (
+                      <button
+                        onClick={() => updateLyricsOffset(0)}
+                        style={{ color: 'var(--text-dim)' }}
+                        className="underline text-[10px] ml-1"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowLyrics(false)}
                 style={{

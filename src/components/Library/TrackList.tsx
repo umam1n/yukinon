@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useApp } from '../../store/AppContext'
-import { Music2, PlusCircle, ListPlus, ListEnd } from 'lucide-react'
+import { Music2, PlusCircle, ListPlus, ListEnd, Pencil } from 'lucide-react'
 import type { Track } from '@shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
+import EditMetadataModal from './EditMetadataModal'
 import { calculateVirtualWindow } from '../../lib/virtualList'
 
 function formatDuration(secs: number): string {
@@ -18,6 +19,7 @@ const OVERSCAN = 12
 export default function TrackList({ tracks, isQueueView }: { tracks: Track[], isQueueView?: boolean }): React.ReactElement {
   const { setQueue, player, removeFromQueue, playNextTrack, addToQueue } = useApp()
   const [trackToPlaylist, setTrackToPlaylist] = useState<Track | null>(null)
+  const [editingTrack, setEditingTrack] = useState<Track | null>(null)
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -231,6 +233,16 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
               >
                 <PlusCircle size={16} />
               </button>
+              {track.source === 'local' && (
+                <button
+                  className="nowplaying-secondary-btn"
+                  onClick={(e) => { e.stopPropagation(); setEditingTrack(track) }}
+                  title="Edit Metadata"
+                  style={{ background: 'transparent', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', padding: 8, minWidth: 36, minHeight: 36, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Pencil size={15} />
+                </button>
+              )}
               {isQueueView && (
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFromQueue(i) }}
@@ -249,6 +261,7 @@ export default function TrackList({ tracks, isQueueView }: { tracks: Track[], is
       {paddingBottom > 0 && <div style={{ height: paddingBottom }} />}
 
       <AddToPlaylistModal track={trackToPlaylist} onClose={() => setTrackToPlaylist(null)} />
+      <EditMetadataModal track={editingTrack} onClose={() => setEditingTrack(null)} />
     </div>
   )
 }

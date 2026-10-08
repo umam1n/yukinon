@@ -582,6 +582,24 @@ const mockApi = {
     },
     findDuplicates: async () => ({ duplicateCount: 0 }),
     removeDuplicates: async () => ({ removed: 0, total: 0 }),
+    updateTags: async (id: string, payload: any): Promise<Track | null> => {
+      const existing = localStorage.getItem('yukinon_local_tracks')
+      const tracks: Track[] = existing ? JSON.parse(existing) : []
+      const idx = tracks.findIndex((t) => t.id === id)
+      if (idx === -1) return null
+
+      const track = { ...tracks[idx] }
+      if (payload.tags?.title !== undefined) track.title = payload.tags.title
+      if (payload.tags?.artist !== undefined) track.artist = payload.tags.artist
+      if (payload.tags?.album !== undefined) track.album = payload.tags.album
+      if (payload.tags?.albumArtist !== undefined) track.albumArtist = payload.tags.albumArtist
+      if (payload.tags?.year !== undefined) track.year = payload.tags.year
+      if (payload.tags?.genre !== undefined) track.genre = payload.tags.genre
+
+      tracks[idx] = track
+      localStorage.setItem('yukinon_local_tracks', JSON.stringify(tracks))
+      return track
+    },
     onChange: (cb: any) => () => {}
   },
   playlists: {

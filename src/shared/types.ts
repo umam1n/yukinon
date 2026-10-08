@@ -143,3 +143,18 @@ export type IpcChannels =
   | 'ytm:seek'
   | 'theme:get'
   | 'theme:set'
+  | 'library:updateTags'
+
+export interface TagUpdatePayload {
+  trackId: string
+  filePath: string
+  tags: {
+    title?: string
+    artist?: string
+    album?: string
+    albumArtist?: string
+    year?: number
+    genre?: string
+    trackNumber?: number
+  }
+}
