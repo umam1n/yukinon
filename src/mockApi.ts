@@ -580,8 +580,39 @@ const mockApi = {
         await clearDB()
       }
     },
-    findDuplicates: async () => ({ duplicateCount: 0 }),
-    removeDuplicates: async () => ({ removed: 0, total: 0 }),
+    findDuplicates: async () => {
+      const existing = localStorage.getItem('yukinon_local_tracks')
+      const tracks: Track[] = existing ? JSON.parse(existing) : []
+      const seen = new Set<string>()
+      let duplicateCount = 0
+      for (const t of tracks) {
+        const key = `${(t.title || '').toLowerCase().trim()}::${(t.artist || '').toLowerCase().trim()}`
+        if (seen.has(key)) {
+          duplicateCount++
+        } else {
+          seen.add(key)
+        }
+      }
+      return { duplicateCount }
+    },
+    removeDuplicates: async () => {
+      const existing = localStorage.getItem('yukinon_local_tracks')
+      const tracks: Track[] = existing ? JSON.parse(existing) : []
+      const seen = new Set<string>()
+      const kept: Track[] = []
+      let removed = 0
+      for (const t of tracks) {
+        const key = `${(t.title || '').toLowerCase().trim()}::${(t.artist || '').toLowerCase().trim()}`
+        if (seen.has(key)) {
+          removed++
+        } else {
+          seen.add(key)
+          kept.push(t)
+        }
+      }
+      localStorage.setItem('yukinon_local_tracks', JSON.stringify(kept))
+      return { removed, total: kept.length }
+    },
     updateTags: async (id: string, payload: any): Promise<Track | null> => {
       const existing = localStorage.getItem('yukinon_local_tracks')
       const tracks: Track[] = existing ? JSON.parse(existing) : []
@@ -589,12 +620,14 @@ const mockApi = {
       if (idx === -1) return null
 
       const track = { ...tracks[idx] }
-      if (payload.tags?.title !== undefined) track.title = payload.tags.title
-      if (payload.tags?.artist !== undefined) track.artist = payload.tags.artist
-      if (payload.tags?.album !== undefined) track.album = payload.tags.album
-      if (payload.tags?.albumArtist !== undefined) track.albumArtist = payload.tags.albumArtist
-      if (payload.tags?.year !== undefined) track.year = payload.tags.year
-      if (payload.tags?.genre !== undefined) track.genre = payload.tags.genre
+      const tags = payload?.tags ?? payload
+      if (tags?.title !== undefined) track.title = tags.title
+      if (tags?.artist !== undefined) track.artist = tags.artist
+      if (tags?.album !== undefined) track.album = tags.album
+      if (tags?.albumArtist !== undefined) track.albumArtist = tags.albumArtist
+      if (tags?.year !== undefined) track.year = tags.year
+      if (tags?.genre !== undefined) track.genre = tags.genre
+      if (tags?.trackNumber !== undefined) track.trackNumber = tags.trackNumber
 
       tracks[idx] = track
       localStorage.setItem('yukinon_local_tracks', JSON.stringify(tracks))
@@ -603,12 +636,117 @@ const mockApi = {
     onChange: (cb: any) => () => {}
   },
   playlists: {
-    getAll: async (): Promise<Playlist[]> => [],
-    create: async (name: string): Promise<Playlist> => ({ id: 'mock', name, trackIds: [], createdAt: new Date().toISOString() }),
-    getTracks: async (id: string): Promise<Track[]> => [],
-    addTrack: async (playlistId: string, trackId: string) => {},
-    removeTrack: async (playlistId: string, trackId: string) => {},
-    delete: async (playlistId: string) => {},
+    getAll: async (): Promise<Playlist[]> => {
+      const stored = localStorage.getItem('yukinon_playlists')
+      const playlists: Playlist[] = stored ? JSON.parse(stored) : []
+      const ptStored = localStorage.getItem('yukinon_playlist_tracks')
+      const playlistTracks: { playlistTrackId: string; playlistId: string; track: Track }[] = ptStored
+        ? JSON.parse(ptStored)
+        : []
+      const localTracksRaw = localStorage.getItem('yukinon_local_tracks')
+      const allTracks: Track[] = localTracksRaw ? JSON.parse(localTracksRaw) : []
+
+      return playlists.map((p) => {
+        if (p.type === 'smart') {
+          const matched = evaluateSmartFilter(p, allTracks)
+          return { ...p, trackCount: matched.length }
+        }
+        const count = playlistTracks.filter((pt) => pt.playlistId === p.id).length
+        return { ...p, trackCount: count }
+      })
+    },
+    create: async (name: string): Promise<string> => {
+      const stored = localStorage.getItem('yukinon_playlists')
+      const playlists: Playlist[] = stored ? JSON.parse(stored) : []
+      const id = `pl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      playlists.unshift({
+        id,
+        name,
+        type: 'static',
+        createdAt: new Date().toISOString(),
+        trackCount: 0
+      })
+      localStorage.setItem('yukinon_playlists', JSON.stringify(playlists))
+      return id
+    },
+    createSmart: async (params: {
+      name: string
+      ruleJson?: string
+      sqlFilter: string
+      icon?: string
+    }): Promise<string> => {
+      const stored = localStorage.getItem('yukinon_playlists')
+      const playlists: Playlist[] = stored ? JSON.parse(stored) : []
+      const id = `smart_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      playlists.unshift({
+        id,
+        name: params.name,
+        type: 'smart',
+        ruleJson: params.ruleJson,
+        sqlFilter: params.sqlFilter,
+        icon: params.icon || 'Sparkles',
+        createdAt: new Date().toISOString(),
+        trackCount: 0
+      })
+      localStorage.setItem('yukinon_playlists', JSON.stringify(playlists))
+      return id
+    },
+    getTracks: async (id: string): Promise<Track[]> => {
+      const stored = localStorage.getItem('yukinon_playlists')
+      const playlists: Playlist[] = stored ? JSON.parse(stored) : []
+      const playlist = playlists.find((p) => p.id === id)
+      if (!playlist) return []
+
+      if (playlist.type === 'smart') {
+        const allTracks = await mockApi.library.getTracks()
+        return evaluateSmartFilter(playlist, allTracks)
+      }
+
+      const ptStored = localStorage.getItem('yukinon_playlist_tracks')
+      const playlistTracks: { playlistTrackId: string; playlistId: string; track: Track }[] = ptStored
+        ? JSON.parse(ptStored)
+        : []
+      return playlistTracks
+        .filter((pt) => pt.playlistId === id)
+        .map((pt) => ({ ...pt.track, playlistTrackId: pt.playlistTrackId }))
+    },
+    addTrack: async (playlistId: string, track: Track) => {
+      const ptStored = localStorage.getItem('yukinon_playlist_tracks')
+      const playlistTracks: { playlistTrackId: string; playlistId: string; track: Track }[] = ptStored
+        ? JSON.parse(ptStored)
+        : []
+      const playlistTrackId = `pt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      playlistTracks.push({ playlistTrackId, playlistId, track })
+      localStorage.setItem('yukinon_playlist_tracks', JSON.stringify(playlistTracks))
+      return playlistTrackId
+    },
+    removeTrack: async (playlistTrackId: string) => {
+      const ptStored = localStorage.getItem('yukinon_playlist_tracks')
+      const playlistTracks: { playlistTrackId: string; playlistId: string; track: Track }[] = ptStored
+        ? JSON.parse(ptStored)
+        : []
+      const updated = playlistTracks.filter(
+        (pt) => pt.playlistTrackId !== playlistTrackId && pt.track.id !== playlistTrackId
+      )
+      localStorage.setItem('yukinon_playlist_tracks', JSON.stringify(updated))
+    },
+    delete: async (playlistId: string) => {
+      const stored = localStorage.getItem('yukinon_playlists')
+      const playlists: Playlist[] = stored ? JSON.parse(stored) : []
+      localStorage.setItem(
+        'yukinon_playlists',
+        JSON.stringify(playlists.filter((p) => p.id !== playlistId))
+      )
+      const ptStored = localStorage.getItem('yukinon_playlist_tracks')
+      if (ptStored) {
+        const playlistTracks: { playlistTrackId: string; playlistId: string; track: Track }[] =
+          JSON.parse(ptStored)
+        localStorage.setItem(
+          'yukinon_playlist_tracks',
+          JSON.stringify(playlistTracks.filter((pt) => pt.playlistId !== playlistId))
+        )
+      }
+    },
     onChange: (cb: any) => () => {}
   },
   eq: {
@@ -664,7 +802,10 @@ const mockApi = {
     getGlobalHotkeys: async () => false,
     setGlobalHotkeys: async () => {},
     getCustomHotkeys: async () => ({ playPause: '', nextTrack: '', prevTrack: '' }),
-    setCustomHotkeys: async () => {}
+    setCustomHotkeys: async () => {},
+    enterMiniPlayer: async () => false,
+    exitMiniPlayer: async () => false,
+    isMiniPlayer: async () => false
   },
   media: {
     onPlayPause: () => () => {},
@@ -700,11 +841,164 @@ const mockApi = {
       return () => window.removeEventListener('yukinon:preamp-updated', listener)
     }
   },
+  ai: {
+    getApiKey: async () => localStorage.getItem('yukinon_gemini_api_key') || '',
+    setApiKey: async (key: string) => {
+      localStorage.setItem('yukinon_gemini_api_key', (key || '').trim())
+      return true
+    },
+    testKey: async (key: string) => {
+      const k = (key || localStorage.getItem('yukinon_gemini_api_key') || '').trim()
+      if (!k) return { valid: false, error: 'API key is empty' }
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(k)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
+          }
+        )
+        return res.ok ? { valid: true } : { valid: false, error: `HTTP ${res.status}` }
+      } catch (e: any) {
+        return { valid: false, error: e?.message || 'Network error' }
+      }
+    },
+    generateSmartPlaylist: async (params: { prompt: string; apiKey?: string }) => {
+      const prompt = (params.prompt || '').trim()
+      const pLower = prompt.toLowerCase()
+      let sqlFilter = '1=1'
+      let icon = 'Sparkles'
+      if (pLower.includes('instrumental') || pLower.includes('study') || pLower.includes('focus')) {
+        sqlFilter = "is_instrumental = 1"
+        icon = 'Headphones'
+      } else if (pLower.includes('live') || pLower.includes('concert')) {
+        sqlFilter = "is_live = 1"
+        icon = 'Mic'
+      } else if (pLower.includes('rock') || pLower.includes('metal')) {
+        sqlFilter = "genre LIKE '%rock%'"
+        icon = 'Flame'
+      } else if (pLower.includes('pop') || pLower.includes('upbeat')) {
+        sqlFilter = "genre LIKE '%pop%'"
+        icon = 'Zap'
+      } else if (pLower.includes('chill') || pLower.includes('night') || pLower.includes('relax')) {
+        sqlFilter = "mood = 'chill'"
+        icon = 'Moon'
+      }
+      return {
+        name: prompt.slice(0, 28) || 'Smart Mix',
+        description: `Dynamic filter generated from "${prompt}"`,
+        sqlFilter,
+        icon
+      }
+    },
+    enrichTracksBatch: async () => {
+      const existing = localStorage.getItem('yukinon_local_tracks')
+      const tracks: Track[] = existing ? JSON.parse(existing) : []
+      let updatedCount = 0
+      for (const t of tracks) {
+        const titleLower = (t.title || '').toLowerCase()
+        const isInst =
+          titleLower.includes('instrumental') ||
+          titleLower.includes('inst.') ||
+          titleLower.includes('off vocal')
+        const isLv = titleLower.includes('live') || titleLower.includes('concert')
+        if (t.isInstrumental !== isInst || t.isLive !== isLv || !t.contentType) {
+          t.isInstrumental = isInst
+          t.isLive = isLv
+          t.contentType = isInst ? 'instrumental' : isLv ? 'live' : 'music'
+          updatedCount++
+        }
+      }
+      localStorage.setItem('yukinon_local_tracks', JSON.stringify(tracks))
+      return {
+        updatedCount,
+        message: `Analyzed ${tracks.length} tracks (${updatedCount} updated with heuristic tags).`
+      }
+    }
+  },
   utils: {
     md5: async (str: string) => {
       return str
     }
   }
+}
+
+function evaluateSmartFilter(playlist: Playlist, tracks: Track[]): Track[] {
+  if (playlist.ruleJson) {
+    try {
+      const parsed = JSON.parse(playlist.ruleJson) as {
+        matchType: 'AND' | 'OR'
+        rules: { field: string; operator: string; value: string }[]
+      }
+      if (parsed.rules && parsed.rules.length > 0) {
+        return tracks.filter((t) => {
+          const results = parsed.rules.map((rule) => {
+            const val = (rule.value || '').toLowerCase().trim()
+            const titleLower = (t.title || '').toLowerCase()
+            const isInst =
+              Boolean(t.isInstrumental) ||
+              titleLower.includes('instrumental') ||
+              titleLower.includes('inst.')
+            const isLv = Boolean(t.isLive) || titleLower.includes('live')
+
+            if (rule.field === 'is_instrumental') {
+              return rule.operator === 'is_false' ? !isInst : isInst
+            }
+            if (rule.field === 'is_live') {
+              return rule.operator === 'is_false' ? !isLv : isLv
+            }
+            if (rule.field === 'is_favorite') {
+              return rule.operator === 'is_false' ? !t.isFavorite : Boolean(t.isFavorite)
+            }
+            if (rule.field === 'content_type') {
+              const ct = (t.contentType || (isInst ? 'instrumental' : isLv ? 'live' : 'music')).toLowerCase()
+              return rule.operator === 'contains' ? ct.includes(val) : ct === val
+            }
+            if (['year', 'bitrate', 'duration'].includes(rule.field)) {
+              const numVal = Number(val) || 0
+              const trackNum = Number((t as any)[rule.field] || 0)
+              if (rule.operator === 'greater_than') return trackNum >= numVal
+              if (rule.operator === 'less_than') return trackNum <= numVal
+              return trackNum === numVal
+            }
+            const fieldStr = String((t as any)[rule.field] || '').toLowerCase()
+            if (!val) return true
+            return rule.operator === 'contains' ? fieldStr.includes(val) : fieldStr === val
+          })
+          return parsed.matchType === 'OR' ? results.some(Boolean) : results.every(Boolean)
+        })
+      }
+    } catch (e) {
+      console.warn('[SmartPlaylist] Failed to parse ruleJson:', e)
+    }
+  }
+
+  const sql = (playlist.sqlFilter || '').toLowerCase().trim()
+  if (!sql || sql === '1=1') return tracks
+
+  return tracks.filter((t) => {
+    const titleLower = (t.title || '').toLowerCase()
+    const isInst =
+      Boolean(t.isInstrumental) ||
+      titleLower.includes('instrumental') ||
+      titleLower.includes('inst.')
+    const isLv = Boolean(t.isLive) || titleLower.includes('live')
+
+    if (sql.includes('is_instrumental = 1')) return isInst
+    if (sql.includes('is_instrumental = 0')) return !isInst
+    if (sql.includes('is_live = 1')) return isLv
+    if (sql.includes('is_favorite = 1')) return Boolean(t.isFavorite)
+
+    const likeMatch = sql.match(/(\w+)\s+like\s+'%([^%']+)%'/i)
+    if (likeMatch) {
+      const field = likeMatch[1]
+      const keyword = likeMatch[2].toLowerCase()
+      const target = String((t as any)[field] || '').toLowerCase()
+      return target.includes(keyword)
+    }
+    return true
+  })
 }
 
 // Attach to window

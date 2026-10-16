@@ -46,7 +46,7 @@ export default function QueueView(): React.ReactElement {
           </button>
         )}
       </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {queue.length > 0 ? (
           <TrackList tracks={queue} isQueueView={true} />
         ) : (

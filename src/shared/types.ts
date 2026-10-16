@@ -28,6 +28,8 @@ export interface Track {
   isLive?: boolean
   mood?: string
   aiTags?: string[]
+  trackNumber?: number
+  playlistTrackId?: string
   replaygainTrackGain?: number | null
   replaygainTrackPeak?: number | null
 }

@@ -15,6 +15,7 @@ import {
 } from '../../lib/jellyfin'
 import type { Track } from '@shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
+import TrackList from '../Library/TrackList'
 
 export default function JellyfinView(): React.ReactElement {
   const { play, setQueue, addToQueue, notify } = useApp()
@@ -499,8 +500,8 @@ export default function JellyfinView(): React.ReactElement {
             )}
 
             {activeTab === 'songs' && (
-              <div className="flex flex-col gap-2">
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 260px)', minHeight: 360, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, flexShrink: 0 }}>
                   <button
                     onClick={handleShuffleAllSongs}
                     disabled={songs.length === 0}
@@ -522,52 +523,13 @@ export default function JellyfinView(): React.ReactElement {
                     Shuffle All
                   </button>
                 </div>
-                
-                {songs.map((song, idx) => {
-                  const track = mapJellyfinTrack(song)
-                  return (
-                    <div
-                      key={song.Id + idx}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '40px 1fr auto',
-                        gap: 12,
-                        padding: '10px 12px',
-                        alignItems: 'center',
-                        borderRadius: 10,
-                        background: 'rgba(255,255,255,0.02)',
-                        marginBottom: 2
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', fontFamily: 'monospace' }}>{idx + 1}</div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.artist} · {track.album}</div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                        <button
-                          onClick={() => handlePlaySong(song, idx)}
-                          style={{ background: 'var(--color-accent)', color: 'black', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          Play
-                        </button>
-                        <button
-                          onClick={() => handleAddToQueue(song)}
-                          style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text)', border: 'none', borderRadius: 6, padding: '6px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          +Q
-                        </button>
-                        <button
-                          onClick={() => setTrackToPlaylist(mapJellyfinTrack(song))}
-                          style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text)', border: 'none', borderRadius: 6, padding: '6px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          +P
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-                {songs.length === 0 && <div style={{ color: 'var(--text-dim)', padding: 20, textAlign: 'center', fontSize: 13 }}>No songs found.</div>}
+                {songs.length > 0 ? (
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <TrackList tracks={songs.map(mapJellyfinTrack)} />
+                  </div>
+                ) : (
+                  <div style={{ color: 'var(--text-dim)', padding: 20, textAlign: 'center', fontSize: 13 }}>No songs found.</div>
+                )}
               </div>
             )}
 
