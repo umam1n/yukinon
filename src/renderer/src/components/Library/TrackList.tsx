@@ -28,10 +28,12 @@ interface ContextMenuState {
 
 export default function TrackList({
   tracks,
-  isQueueView
+  isQueueView,
+  onRemoveTrack
 }: {
   tracks: Track[]
   isQueueView?: boolean
+  onRemoveTrack?: (track: Track, index: number) => void
 }): React.ReactElement {
   const { setQueue, player, removeFromQueue, playNextTrack, addToQueue } = useApp()
   const [trackToPlaylist, setTrackToPlaylist] = useState<Track | null>(null)
@@ -208,7 +210,7 @@ export default function TrackList({
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      style={{ flex: 1, overflowY: 'auto', padding: '0 0 12px 0', position: 'relative' }}
+      style={{ flex: 1, height: '100%', minHeight: 0, overflowY: 'auto', padding: '0 0 12px 0', position: 'relative' }}
     >
       {/* Sticky header row */}
       <div
@@ -252,7 +254,12 @@ export default function TrackList({
         return (
           <div
             key={`${track.id}-${i}`}
-            onClick={() => setSelectedTrackId(track.id)}
+            onClick={() => {
+              setSelectedTrackId(track.id)
+              if (layoutMode === 'compact' || (window as any).yukinon?.platform === 'android') {
+                setQueue(sortedTracks, i)
+              }
+            }}
             onDoubleClick={() => setQueue(sortedTracks, i)}
             onContextMenu={(e) => {
               e.preventDefault()
@@ -571,6 +578,34 @@ export default function TrackList({
                   <Trash2 size={16} />
                 </button>
               )}
+              {!isQueueView && onRemoveTrack && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemoveTrack(track, i)
+                  }}
+                  title="Remove from Playlist"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-dim)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = '#ef4444'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--text-dim)'
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           </div>
         )
@@ -708,6 +743,27 @@ export default function TrackList({
               >
                 <Trash2 size={14} />
                 <span>Remove from Queue</span>
+              </button>
+            </>
+          )}
+          {!isQueueView && onRemoveTrack && (
+            <>
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+              <button
+                onClick={() => {
+                  onRemoveTrack(contextMenu.track, contextMenu.index)
+                  setContextMenu(null)
+                }}
+                style={{ ...contextItemStyle, color: '#ef4444' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Remove from Playlist</span>
               </button>
             </>
           )}

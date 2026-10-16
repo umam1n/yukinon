@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { FolderOpen, Search, Music2, RefreshCw, Disc, Mic2, ArrowLeft, Play } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 import type { Track } from '../../../../../../shared/types'
@@ -41,6 +41,15 @@ export default function LibraryView(): React.ReactElement {
   const [scanning, setScanning] = useState(false)
   const [selectedAlbumKey, setSelectedAlbumKey] = useState<string | null>(null)
   const [selectedArtistName, setSelectedArtistName] = useState<string | null>(null)
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const filtered = useMemo(() => {
     let result = [...tracks]
@@ -138,11 +147,12 @@ export default function LibraryView(): React.ReactElement {
 
   // Active artist for artists split view
   const activeArtist = useMemo(() => {
-    if (!selectedArtistName && artists.length > 0) {
+    if (!selectedArtistName && artists.length > 0 && windowWidth >= 640) {
       return artists[0]
     }
-    return artists.find((a) => a.name === selectedArtistName) || (artists.length > 0 ? artists[0] : null)
-  }, [artists, selectedArtistName])
+    if (!selectedArtistName) return null
+    return artists.find((a) => a.name === selectedArtistName) || null
+  }, [artists, selectedArtistName, windowWidth])
 
   const handleAddFolder = useCallback(async () => {
     try {
@@ -200,7 +210,8 @@ export default function LibraryView(): React.ReactElement {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
+          flexWrap: 'wrap',
+          gap: 10,
           padding: '12px 20px',
           borderBottom: '1px solid var(--border)',
           flexShrink: 0
@@ -221,6 +232,7 @@ export default function LibraryView(): React.ReactElement {
             onClick={() => {
               setViewMode('tracks')
               setSelectedAlbumKey(null)
+              setSelectedArtistName(null)
             }}
             style={switcherBtnStyle(viewMode === 'tracks')}
             title="Tracks View"
@@ -232,6 +244,7 @@ export default function LibraryView(): React.ReactElement {
             onClick={() => {
               setViewMode('albums')
               setSelectedAlbumKey(null)
+              setSelectedArtistName(null)
             }}
             style={switcherBtnStyle(viewMode === 'albums')}
             title="Albums View"
@@ -243,6 +256,7 @@ export default function LibraryView(): React.ReactElement {
             onClick={() => {
               setViewMode('artists')
               setSelectedAlbumKey(null)
+              setSelectedArtistName(null)
             }}
             style={switcherBtnStyle(viewMode === 'artists')}
             title="Artists View"
@@ -593,14 +607,14 @@ export default function LibraryView(): React.ReactElement {
         )
       ) : (
         /* Artists Split View */
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
           {/* Left Column: Artists List */}
           <div
             style={{
-              width: 220,
-              borderRight: '1px solid var(--border)',
+              width: windowWidth < 640 ? '100%' : 220,
+              borderRight: windowWidth < 640 ? 'none' : '1px solid var(--border)',
               overflowY: 'auto',
-              display: 'flex',
+              display: windowWidth < 640 && activeArtist ? 'none' : 'flex',
               flexDirection: 'column',
               padding: '8px 0',
               flexShrink: 0
@@ -616,7 +630,7 @@ export default function LibraryView(): React.ReactElement {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '10px 16px',
+                    padding: '12px 16px',
                     border: 'none',
                     background: isSelected ? 'rgba(var(--color-accent-rgb), 0.12)' : 'transparent',
                     color: isSelected ? 'var(--color-accent)' : 'var(--text)',
@@ -664,7 +678,15 @@ export default function LibraryView(): React.ReactElement {
           </div>
 
           {/* Right Column: Artist Tracks */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: windowWidth < 640 && !activeArtist ? 'none' : 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
             {activeArtist ? (
               <>
                 <div
@@ -672,39 +694,63 @@ export default function LibraryView(): React.ReactElement {
                     padding: '16px 24px',
                     borderBottom: '1px solid var(--border)',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
+                    flexDirection: 'column',
+                    gap: 10,
                     flexShrink: 0
                   }}
                 >
-                  <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
-                      {activeArtist.name}
-                    </h2>
-                    <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-                      {activeArtist.tracks.length} track{activeArtist.tracks.length === 1 ? '' : 's'} ·{' '}
-                      {activeArtist.albumCount} album{activeArtist.albumCount === 1 ? '' : 's'}
-                    </p>
+                  {windowWidth < 640 && (
+                    <button
+                      onClick={() => setSelectedArtistName(null)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-3)',
+                        color: 'var(--text-muted)',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        width: 'fit-content'
+                      }}
+                    >
+                      <ArrowLeft size={14} />
+                      Back to Artists
+                    </button>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+                        {activeArtist.name}
+                      </h2>
+                      <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
+                        {activeArtist.tracks.length} track{activeArtist.tracks.length === 1 ? '' : 's'} ·{' '}
+                        {activeArtist.albumCount} album{activeArtist.albumCount === 1 ? '' : 's'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setQueue(activeArtist.tracks, 0)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 16px',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: 'var(--color-accent)',
+                        color: '#fff',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Play size={14} fill="currentColor" />
+                      Play All
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setQueue(activeArtist.tracks, 0)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '8px 16px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: 'var(--color-accent)',
-                      color: '#fff',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Play size={14} fill="currentColor" />
-                    Play All
-                  </button>
                 </div>
                 <TrackList tracks={activeArtist.tracks} />
               </>

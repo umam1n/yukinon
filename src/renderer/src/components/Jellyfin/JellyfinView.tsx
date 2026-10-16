@@ -14,6 +14,7 @@ import {
 } from '../../lib/jellyfin'
 import type { Track } from '../../../../shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
+import TrackList from '../Library/TrackList'
 
 export default function JellyfinView(): React.ReactElement {
   const { play, setQueue, addToQueue, notify } = useApp()
@@ -518,8 +519,8 @@ export default function JellyfinView(): React.ReactElement {
 
             {/* Songs Tab */}
             {activeTab === 'songs' && (
-              <div style={{ overflowX: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 250px)', minHeight: 360, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12, flexShrink: 0 }}>
                   <button
                     onClick={handleShuffleAllSongs}
                     disabled={songs.length === 0}
@@ -541,101 +542,13 @@ export default function JellyfinView(): React.ReactElement {
                     Shuffle All
                   </button>
                 </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-dim)' }}>
-                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>#</th>
-                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Title</th>
-                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Artist</th>
-                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase' }}>Album</th>
-                      <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {songs.map((song, idx) => {
-                      const track = mapJellyfinTrack(song)
-                      return (
-                        <tr
-                          key={song.Id + idx}
-                          style={{
-                            borderBottom: '1px solid rgba(255,255,255,0.03)',
-                            transition: 'background 0.2s',
-                            cursor: 'default'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{idx + 1}</td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              <img src={track.artwork} style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover', background: 'rgba(0,0,0,0.2)' }} />
-                              <div style={{ fontWeight: 600, color: 'var(--text)' }}>{track.title}</div>
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{track.artist}</td>
-                          <td style={{ padding: '12px 16px', color: 'var(--text-dim)', fontSize: 14 }}>{track.album}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                              <button
-                                onClick={() => handlePlaySong(song, idx)}
-                                style={{
-                                  background: 'var(--color-accent)',
-                                  color: 'black',
-                                  border: 'none',
-                                  borderRadius: 6,
-                                  padding: '6px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 4
-                                }}
-                              >
-                                <Play size={12} fill="currentColor" /> Play
-                              </button>
-                              <button
-                                onClick={() => handleAddToQueue(song)}
-                                style={{
-                                  background: 'rgba(255,255,255,0.08)',
-                                  color: 'var(--text)',
-                                  border: 'none',
-                                  borderRadius: 6,
-                                  padding: '6px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                + Queue
-                              </button>
-                              <button
-                                onClick={() => setTrackToPlaylist(mapJellyfinTrack(song))}
-                                style={{
-                                  background: 'rgba(255,255,255,0.08)',
-                                  color: 'var(--text)',
-                                  border: 'none',
-                                  borderRadius: 6,
-                                  padding: '6px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                + Playlist
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                {songs.length === 0 && <div style={{ color: 'var(--text-dim)', padding: 20, textAlign: 'center' }}>No songs found.</div>}
+                {songs.length > 0 ? (
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <TrackList tracks={songs.map(mapJellyfinTrack)} />
+                  </div>
+                ) : (
+                  <div style={{ color: 'var(--text-dim)', padding: 20, textAlign: 'center' }}>No songs found.</div>
+                )}
               </div>
             )}
 

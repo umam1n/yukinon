@@ -311,9 +311,16 @@ export default function PlaylistsView(): React.ReactElement {
             </div>
 
             {/* Virtualized Responsive TrackList */}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               {tracks.length > 0 ? (
-                <TrackList tracks={tracks} />
+                <TrackList
+                  tracks={tracks}
+                  onRemoveTrack={
+                    activePlaylist.type !== 'smart'
+                      ? (track) => handleRemoveTrack((track as any).playlistTrackId || track.id)
+                      : undefined
+                  }
+                />
               ) : (
                 <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
                   This playlist is empty. Add songs from your library or Jellyfin/Subsonic.
