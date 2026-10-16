@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react'
-import { RotateCcw, Save, Check, Headphones, Search, X } from 'lucide-react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { RotateCcw, Save, Check, Headphones, Search, X, Activity } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 import DeviceProfiles from './DeviceProfiles'
 import type { EQBands } from '@shared/types'
@@ -23,14 +23,112 @@ const MIN_DB = -12
 const MAX_DB = 12
 
 export default function EQPanel(): React.ReactElement {
-  const { eqBands, setEqBand, eqPresets, activePresetId, applyEqPreset, saveEqPreset } = useApp()
+  const { eqBands, setEqBand, eqPresets, activePresetId, applyEqPreset, saveEqPreset, player } = useApp()
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [justSaved, setJustSaved] = useState(false)
+  const [showSpectrum, setShowSpectrum] = useState(true)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const [autoEqModalOpen, setAutoEqModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBrand, setSelectedBrand] = useState('all')
+
+  // Real-time 60fps spectrum visualizer on canvas (zero React re-renders)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !showSpectrum) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let animId = 0
+    const smoothLevels = new Float32Array(10)
+
+    const renderFrame = () => {
+      const dpr = window.devicePixelRatio || 1
+      const rect = canvas.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        const targetW = Math.floor(rect.width * dpr)
+        const targetH = Math.floor(rect.height * dpr)
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW
+          canvas.height = targetH
+        }
+      }
+
+      const w = canvas.width
+      const h = canvas.height
+      ctx.clearRect(0, 0, w, h)
+
+      const isPlaying = player.status === 'playing'
+      const rawLevels = isPlaying ? audioEngine.getOctaveBandLevels() : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+      const accentRgb =
+        getComputedStyle(document.documentElement).getPropertyValue('--color-accent-rgb').trim() ||
+        '59, 130, 246'
+
+      const count = 10
+      const points: { x: number; y: number }[] = []
+
+      for (let i = 0; i < count; i++) {
+        const target = rawLevels[i] || 0
+        smoothLevels[i] = smoothLevels[i] * 0.78 + target * 0.22
+        const x = ((i + 0.5) / count) * w
+        const barH = Math.max(2, smoothLevels[i] * (h * 0.78))
+        const y = h - barH
+        points.push({ x, y })
+
+        // Subtle vertical spectrum bar per band
+        const barW = Math.max(12 * (window.devicePixelRatio || 1), (w / count) * 0.38)
+        const grad = ctx.createLinearGradient(0, y, 0, h)
+        grad.addColorStop(0, `rgba(${accentRgb}, 0.28)`)
+        grad.addColorStop(1, `rgba(${accentRgb}, 0.02)`)
+        ctx.fillStyle = grad
+        ctx.beginPath()
+        ctx.roundRect(x - barW / 2, y, barW, barH, 4 * (window.devicePixelRatio || 1))
+        ctx.fill()
+      }
+
+      // Draw smooth spline curve across the 10 octave bands
+      if (points.length > 0) {
+        ctx.beginPath()
+        ctx.moveTo(0, h)
+        ctx.lineTo(points[0].x, points[0].y)
+        for (let i = 0; i < points.length - 1; i++) {
+          const xc = (points[i].x + points[i + 1].x) / 2
+          const yc = (points[i].y + points[i + 1].y) / 2
+          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc)
+        }
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y)
+        ctx.lineTo(w, h)
+        ctx.closePath()
+
+        const areaGrad = ctx.createLinearGradient(0, h * 0.2, 0, h)
+        areaGrad.addColorStop(0, `rgba(${accentRgb}, 0.18)`)
+        areaGrad.addColorStop(1, `rgba(${accentRgb}, 0.0)`)
+        ctx.fillStyle = areaGrad
+        ctx.fill()
+
+        // Top stroke line
+        ctx.beginPath()
+        ctx.moveTo(points[0].x, points[0].y)
+        for (let i = 0; i < points.length - 1; i++) {
+          const xc = (points[i].x + points[i + 1].x) / 2
+          const yc = (points[i].y + points[i + 1].y) / 2
+          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc)
+        }
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y)
+        ctx.strokeStyle = `rgba(${accentRgb}, 0.55)`
+        ctx.lineWidth = 2 * (window.devicePixelRatio || 1)
+        ctx.stroke()
+      }
+
+      animId = requestAnimationFrame(renderFrame)
+    }
+
+    animId = requestAnimationFrame(renderFrame)
+    return () => cancelAnimationFrame(animId)
+  }, [showSpectrum, player.status])
 
   const brands = useMemo(() => {
     const bSet = new Set(AUTOEQ_PROFILES.map((p) => p.brand))
@@ -102,16 +200,31 @@ export default function EQPanel(): React.ReactElement {
           justifyContent: 'space-between',
           padding: '16px 24px',
           borderBottom: '1px solid var(--border)',
-          flexShrink: 0
+          flexShrink: 0,
+          flexWrap: 'wrap',
+          gap: 10
         }}
       >
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Equalizer</h2>
           <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-            10-band EQ · changes apply in real-time
+            10-band EQ · real-time FFT spectrum analyzer
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setShowSpectrum((s) => !s)}
+            style={{
+              ...btnStyle('secondary'),
+              borderColor: showSpectrum ? 'var(--color-accent)' : 'var(--border)',
+              color: showSpectrum ? 'var(--color-accent)' : 'var(--text-muted)',
+              background: showSpectrum ? 'rgba(var(--color-accent-rgb), 0.12)' : 'var(--bg-3)'
+            }}
+            title="Toggle real-time FFT spectrum visualizer"
+          >
+            <Activity size={14} />
+            Spectrum
+          </button>
           <button
             onClick={() => setAutoEqModalOpen(true)}
             style={btnStyle('secondary')}
@@ -183,9 +296,26 @@ export default function EQPanel(): React.ReactElement {
               gap: 16,
               padding: '20px 0',
               flex: 1,
-              position: 'relative'
+              position: 'relative',
+              minHeight: 220
             }}
           >
+            {/* Real-time Spectrum Analyzer Canvas */}
+            {showSpectrum && (
+              <canvas
+                ref={canvasRef}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                  borderRadius: 12
+                }}
+              />
+            )}
+
             {/* 0dB center line */}
             <div
               style={{

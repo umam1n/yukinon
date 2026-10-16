@@ -4,3 +4,7 @@ release
 dist
 .env
 *.db
+
+*.apk
+*.idsig
+*.keystore

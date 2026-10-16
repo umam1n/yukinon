@@ -4,6 +4,8 @@ import type { IPlayerProvider } from './IPlayerProvider'
 
 export class LocalPlayer implements IPlayerProvider {
   private audioEl: HTMLAudioElement | null = null
+  private preloadEl: HTMLAudioElement | null = null
+  private preloadedPath: string | null = null
   private listeners: Set<(state: Partial<PlayerState>) => void> = new Set()
   private lastPositionFloor = 0
 
@@ -13,6 +15,11 @@ export class LocalPlayer implements IPlayerProvider {
     this.audioEl = new Audio()
     this.audioEl.crossOrigin = 'anonymous'
     this.audioEl.preload = 'auto'
+
+    this.preloadEl = new Audio()
+    this.preloadEl.crossOrigin = 'anonymous'
+    this.preloadEl.preload = 'auto'
+
     audioEngine.initialize()
 
     this.audioEl.onwaiting = () => {
@@ -56,6 +63,27 @@ export class LocalPlayer implements IPlayerProvider {
     if (this.currentObjectUrl) {
       URL.revokeObjectURL(this.currentObjectUrl)
       this.currentObjectUrl = null
+    }
+  }
+
+  preloadNext(track: Track | null): void {
+    if (!this.preloadEl) return
+    if (!track || track.source !== 'local' || !track.path || track.path.startsWith('indexeddb://')) {
+      this.preloadEl.src = ''
+      this.preloadedPath = null
+      return
+    }
+    const targetUrl =
+      window.yukinon.platform === 'android'
+        ? track.path
+        : `yukinon://local/track?path=${encodeURIComponent(track.path)}`
+    if (this.preloadedPath === targetUrl) return
+    this.preloadedPath = targetUrl
+    this.preloadEl.src = targetUrl
+    try {
+      this.preloadEl.load()
+    } catch {
+      // ignore
     }
   }
 
@@ -144,6 +172,10 @@ export class LocalPlayer implements IPlayerProvider {
     this.listeners.clear()
     audioEngine.suspend()
     this.revokeObjectUrl()
+    if (this.preloadEl) {
+      this.preloadEl.src = ''
+      this.preloadEl = null
+    }
     if (this.audioEl) {
       this.audioEl.pause()
       this.audioEl.src = ''
