@@ -20,23 +20,24 @@ const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as
 
 /**
  * AudioEngine — singleton managing the Web Audio API graph.
- * 
+ *
  * Audio graph:
- *   [LocalSource / HowlerNode] ──┐
- *                                ├──► [EQ Filter Chain (10 bands)] ──► [GainNode] ──► Destination
- *   [YTM WebView capture]  ──────┘
+ *   [LocalSource Deck A / B] ──► [EQ Filter Chain (10 bands)] ──► [PreampGain] ──► [AnalyserNode] ──► [MasterGain] ──► Destination
  */
 class AudioEngine {
   private ctx: AudioContext | null = null
   private filters: BiquadFilterNode[] = []
   private preampGain: GainNode | null = null
+  private analyser: AnalyserNode | null = null
+  private freqData: Uint8Array | null = null
   private masterGain: GainNode | null = null
   private localSources: Map<HTMLAudioElement, MediaElementAudioSourceNode> = new Map()
 
   initialize(): AudioContext {
     if (this.ctx) return this.ctx
 
-    const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const AudioCtxClass =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     this.ctx = new AudioCtxClass({ latencyHint: 'playback' })
 
     // Create 10-band EQ filter chain
@@ -54,24 +55,30 @@ class AudioEngine {
       this.filters[i].connect(this.filters[i + 1])
     }
 
-    // Preamp and master gain nodes
+    // Preamp, analyser, and master gain nodes
     this.preampGain = this.ctx.createGain()
     this.preampGain.gain.value = 1.0
+
+    this.analyser = this.ctx.createAnalyser()
+    this.analyser.fftSize = 256
+    this.analyser.smoothingTimeConstant = 0.8
+    this.freqData = new Uint8Array(this.analyser.frequencyBinCount)
 
     this.masterGain = this.ctx.createGain()
     this.masterGain.gain.value = 0.8
 
     this.filters[this.filters.length - 1].connect(this.preampGain)
-    this.preampGain.connect(this.masterGain)
+    this.preampGain.connect(this.analyser)
+    this.analyser.connect(this.masterGain)
     this.masterGain.connect(this.ctx.destination)
 
-    console.log('[AudioEngine] Initialized with', EQ_FREQUENCIES.length, 'EQ bands')
+    console.log('[AudioEngine] Initialized with', EQ_FREQUENCIES.length, 'EQ bands + AnalyserNode')
     return this.ctx
   }
 
   connectLocalAudio(audioEl: HTMLAudioElement): void {
     if (!this.ctx) this.initialize()
-    
+
     if (this.localSources.has(audioEl)) {
       return // Already created and connected
     }
@@ -89,7 +96,9 @@ class AudioEngine {
 
   applyBands(bands: EQBands): void {
     if (!bands || !this.ctx) return
-    const freqs = Object.keys(bands).map(Number).sort((a, b) => a - b)
+    const freqs = Object.keys(bands)
+      .map(Number)
+      .sort((a, b) => a - b)
     freqs.forEach((freq, i) => {
       if (this.filters[i]) {
         this.filters[i].gain.setTargetAtTime(bands[freq as keyof EQBands], this.ctx!.currentTime, 0.01)
@@ -118,9 +127,35 @@ class AudioEngine {
     this.setPreampGain(targetGain)
   }
 
+  getFrequencyData(): Uint8Array | null {
+    if (!this.analyser || !this.freqData) return null
+    this.analyser.getByteFrequencyData(this.freqData as any)
+    return this.freqData
+  }
+
+  getOctaveBandLevels(): number[] {
+    const data = this.getFrequencyData()
+    if (!data || !this.ctx) return EQ_FREQUENCIES.map(() => 0)
+    const nyquist = this.ctx.sampleRate / 2
+    const binCount = data.length
+
+    return EQ_FREQUENCIES.map((freq) => {
+      const lowFreq = freq / 1.414
+      const highFreq = Math.min(nyquist, freq * 1.414)
+      const startBin = Math.max(0, Math.floor((lowFreq / nyquist) * binCount))
+      const endBin = Math.min(binCount - 1, Math.ceil((highFreq / nyquist) * binCount))
+      let sum = 0
+      let count = 0
+      for (let b = startBin; b <= endBin; b++) {
+        sum += data[b]
+        count++
+      }
+      return count > 0 ? sum / (count * 255) : 0
+    })
+  }
+
   suspend(): void {
     // Keep AudioContext warm across pauses to avoid buffer underruns and clock desync on PipeWire/ALSA.
-    // An idle AudioContext consumes negligible CPU when HTMLAudioElement is not feeding samples.
   }
 
   async resume(): Promise<void> {

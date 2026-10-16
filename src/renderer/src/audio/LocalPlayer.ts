@@ -4,6 +4,8 @@ import type { IPlayerProvider } from './IPlayerProvider'
 
 export class LocalPlayer implements IPlayerProvider {
   private audioEl: HTMLAudioElement | null = null
+  private preloadEl: HTMLAudioElement | null = null
+  private preloadedPath: string | null = null
   private listeners: Set<(state: Partial<PlayerState>) => void> = new Set()
   private lastPositionFloor = 0
 
@@ -11,6 +13,11 @@ export class LocalPlayer implements IPlayerProvider {
     this.audioEl = new Audio()
     this.audioEl.crossOrigin = 'anonymous'
     this.audioEl.preload = 'auto'
+
+    this.preloadEl = new Audio()
+    this.preloadEl.crossOrigin = 'anonymous'
+    this.preloadEl.preload = 'auto'
+
     audioEngine.initialize()
 
     this.audioEl.onwaiting = () => {
@@ -53,6 +60,24 @@ export class LocalPlayer implements IPlayerProvider {
   onStateChange(callback: (state: Partial<PlayerState>) => void): () => void {
     this.listeners.add(callback)
     return () => this.listeners.delete(callback)
+  }
+
+  preloadNext(track: Track | null): void {
+    if (!this.preloadEl) return
+    if (!track || track.source !== 'local' || !track.path) {
+      this.preloadEl.src = ''
+      this.preloadedPath = null
+      return
+    }
+    const targetUrl = `yukinon://local/track?path=${encodeURIComponent(track.path)}`
+    if (this.preloadedPath === targetUrl) return
+    this.preloadedPath = targetUrl
+    this.preloadEl.src = targetUrl
+    try {
+      this.preloadEl.load()
+    } catch {
+      // ignore
+    }
   }
 
   async play(track?: Track): Promise<void> {
@@ -117,6 +142,10 @@ export class LocalPlayer implements IPlayerProvider {
   destroy(): void {
     this.listeners.clear()
     audioEngine.suspend()
+    if (this.preloadEl) {
+      this.preloadEl.src = ''
+      this.preloadEl = null
+    }
     if (this.audioEl) {
       this.audioEl.pause()
       this.audioEl.src = ''

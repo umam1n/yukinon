@@ -21,6 +21,7 @@ export interface AppContextType {
   playNextTrack: (track: Track) => void
   clearQueue: () => void
   removeFromQueue: (index: number) => void
+  moveInQueue: (fromIndex: number, toIndex: number) => void
   currentQueueIndex: number
   shuffle: boolean
   repeat: 'off' | 'all' | 'one'

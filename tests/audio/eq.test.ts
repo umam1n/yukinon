@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EQ_FREQUENCIES } from '@renderer/audio/AudioEngine'
+import { EQ_FREQUENCIES, audioEngine } from '@renderer/audio/AudioEngine'
 import type { EQBands } from '@shared/types'
 
 export const MIN_GAIN_DB = -12
@@ -106,6 +106,15 @@ describe('Audio Equalizer & EQ Bands', () => {
         const gain = customBands[freq as keyof EQBands]
         expect(gain).toBeDefined()
         expect(clampGain(gain)).toBe(gain)
+      })
+    })
+
+    it('returns 10 normalized octave band levels from audioEngine.getOctaveBandLevels()', () => {
+      const levels = audioEngine.getOctaveBandLevels()
+      expect(levels).toHaveLength(10)
+      levels.forEach((lvl) => {
+        expect(lvl).toBeGreaterThanOrEqual(0)
+        expect(lvl).toBeLessThanOrEqual(1)
       })
     })
   })

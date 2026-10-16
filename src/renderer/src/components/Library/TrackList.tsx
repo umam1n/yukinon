@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../../store/AppContext'
-import { Music2, PlusCircle, ListPlus, ListEnd, ArrowUp, ArrowDown, Play, Trash2, Pencil } from 'lucide-react'
+import { Music2, PlusCircle, ListPlus, ListEnd, ArrowUp, ArrowDown, Play, Trash2, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import type { Track } from '../../../../../../shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
 import EditMetadataModal from './EditMetadataModal'
@@ -35,13 +35,15 @@ export default function TrackList({
   isQueueView?: boolean
   onRemoveTrack?: (track: Track, index: number) => void
 }): React.ReactElement {
-  const { setQueue, player, removeFromQueue, playNextTrack, addToQueue } = useApp()
+  const { setQueue, player, removeFromQueue, moveInQueue, playNextTrack, addToQueue } = useApp()
   const [trackToPlaylist, setTrackToPlaylist] = useState<Track | null>(null)
   const [trackToEdit, setTrackToEdit] = useState<Track | null>(null)
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -254,6 +256,31 @@ export default function TrackList({
         return (
           <div
             key={`${track.id}-${i}`}
+            draggable={Boolean(isQueueView && !sortKey)}
+            onDragStart={() => {
+              if (isQueueView && !sortKey) setDraggedIndex(i)
+            }}
+            onDragOver={(e) => {
+              if (isQueueView && !sortKey && draggedIndex !== null && draggedIndex !== i) {
+                e.preventDefault()
+                setDragOverIndex(i)
+              }
+            }}
+            onDragLeave={() => {
+              if (dragOverIndex === i) setDragOverIndex(null)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (isQueueView && !sortKey && draggedIndex !== null && draggedIndex !== i) {
+                moveInQueue(draggedIndex, i)
+              }
+              setDraggedIndex(null)
+              setDragOverIndex(null)
+            }}
+            onDragEnd={() => {
+              setDraggedIndex(null)
+              setDragOverIndex(null)
+            }}
             onClick={() => {
               setSelectedTrackId(track.id)
               if (layoutMode === 'compact' || (window as any).yukinon?.platform === 'android') {
@@ -279,7 +306,7 @@ export default function TrackList({
               height: 52,
               boxSizing: 'border-box',
               alignItems: 'center',
-              cursor: 'pointer',
+              cursor: isQueueView && !sortKey ? 'grab' : 'pointer',
               borderRadius: 8,
               margin: layoutMode === 'compact' ? '2px 4px' : '2px 12px',
               background: isActive
@@ -288,9 +315,12 @@ export default function TrackList({
                 ? 'rgba(var(--color-accent-rgb), 0.06)'
                 : 'transparent',
               outline:
-                isSelected && !isActive
+                dragOverIndex === i
+                  ? '2px dashed var(--color-accent)'
+                  : isSelected && !isActive
                   ? '1px solid rgba(var(--color-accent-rgb), 0.3)'
                   : 'none',
+              opacity: draggedIndex === i ? 0.5 : 1,
               transition: 'background 0.15s cubic-bezier(0.4, 0, 0.2, 1)'
             }}
             onMouseEnter={(e) => {
@@ -446,58 +476,108 @@ export default function TrackList({
                 alignItems: 'center'
               }}
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  playNextTrack(track)
-                }}
-                title="Play Next"
-                style={{
-                  background: 'transparent',
-                  color: 'var(--text-dim)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'var(--text)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--text-dim)'
-                }}
-              >
-                <ListPlus size={16} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  addToQueue(track)
-                }}
-                title="Add to Queue"
-                style={{
-                  background: 'transparent',
-                  color: 'var(--text-dim)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'var(--text)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--text-dim)'
-                }}
-              >
-                <ListEnd size={16} />
-              </button>
+              {isQueueView && !sortKey && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (i > 0) moveInQueue(i, i - 1)
+                    }}
+                    disabled={i === 0}
+                    title="Move Up in Queue"
+                    style={{
+                      background: 'transparent',
+                      color: i === 0 ? 'var(--border)' : 'var(--text-dim)',
+                      border: 'none',
+                      cursor: i === 0 ? 'default' : 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ChevronUp size={15} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (i < sortedTracks.length - 1) moveInQueue(i, i + 1)
+                    }}
+                    disabled={i >= sortedTracks.length - 1}
+                    title="Move Down in Queue"
+                    style={{
+                      background: 'transparent',
+                      color: i >= sortedTracks.length - 1 ? 'var(--border)' : 'var(--text-dim)',
+                      border: 'none',
+                      cursor: i >= sortedTracks.length - 1 ? 'default' : 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ChevronDown size={15} />
+                  </button>
+                </>
+              )}
+              {!isQueueView && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      playNextTrack(track)
+                    }}
+                    title="Play Next"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text-dim)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--text)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--text-dim)'
+                    }}
+                  >
+                    <ListPlus size={16} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      addToQueue(track)
+                    }}
+                    title="Add to Queue"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text-dim)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--text)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--text-dim)'
+                    }}
+                  >
+                    <ListEnd size={16} />
+                  </button>
+                </>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -524,32 +604,34 @@ export default function TrackList({
               >
                 <PlusCircle size={16} />
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setTrackToEdit(track)
-                }}
-                title="Edit Metadata"
-                style={{
-                  background: 'transparent',
-                  color: 'var(--text-dim)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'var(--text)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--text-dim)'
-                }}
-              >
-                <Pencil size={15} />
-              </button>
+              {!isQueueView && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setTrackToEdit(track)
+                  }}
+                  title="Edit Metadata"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-dim)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = 'var(--text)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--text-dim)'
+                  }}
+                >
+                  <Pencil size={15} />
+                </button>
+              )}
               {isQueueView && (
                 <button
                   onClick={(e) => {
@@ -621,7 +703,7 @@ export default function TrackList({
           style={{
             position: 'fixed',
             left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 180)),
-            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 220)),
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)),
             zIndex: 1000,
             background: 'var(--bg-card)',
             border: '1px solid var(--border)',
@@ -728,6 +810,30 @@ export default function TrackList({
           {isQueueView && (
             <>
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+              {contextMenu.index > 0 && (
+                <button
+                  onClick={() => {
+                    moveInQueue(contextMenu.index, contextMenu.index - 1)
+                    setContextMenu(null)
+                  }}
+                  style={contextItemStyle}
+                >
+                  <ChevronUp size={14} />
+                  <span>Move Up</span>
+                </button>
+              )}
+              {contextMenu.index < sortedTracks.length - 1 && (
+                <button
+                  onClick={() => {
+                    moveInQueue(contextMenu.index, contextMenu.index + 1)
+                    setContextMenu(null)
+                  }}
+                  style={contextItemStyle}
+                >
+                  <ChevronDown size={14} />
+                  <span>Move Down</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   removeFromQueue(contextMenu.index)

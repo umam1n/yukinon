@@ -101,6 +101,37 @@ export function removeFromQueue(state: QueueState, index: number): QueueState {
   }
 }
 
+export function moveInQueue(state: QueueState, fromIndex: number, toIndex: number): QueueState {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= state.queue.length ||
+    toIndex < 0 ||
+    toIndex >= state.queue.length ||
+    fromIndex === toIndex
+  ) {
+    return state
+  }
+
+  const newQueue = [...state.queue]
+  const [moved] = newQueue.splice(fromIndex, 1)
+  newQueue.splice(toIndex, 0, moved)
+
+  let newIndex = state.currentIndex
+  if (fromIndex === state.currentIndex) {
+    newIndex = toIndex
+  } else if (fromIndex < state.currentIndex && toIndex >= state.currentIndex) {
+    newIndex = state.currentIndex - 1
+  } else if (fromIndex > state.currentIndex && toIndex <= state.currentIndex) {
+    newIndex = state.currentIndex + 1
+  }
+
+  return {
+    ...state,
+    queue: newQueue,
+    currentIndex: newIndex
+  }
+}
+
 export function toggleShuffle(state: QueueState): QueueState {
   return {
     ...state,
@@ -439,6 +470,49 @@ describe('Queue State Logic', () => {
       let state = setQueue(createInitialQueueState(), tracks, 0)
       state.repeat = 'off'
       expect(getPrevQueueIndex(state)).toBe(0)
+    })
+  })
+
+  describe('Reordering tracks in queue (moveInQueue)', () => {
+    const tracks = [
+      mockTrack('0', 'Track 0'),
+      mockTrack('1', 'Track 1'),
+      mockTrack('2', 'Track 2'),
+      mockTrack('3', 'Track 3')
+    ]
+
+    it('updates currentIndex when moving the currently playing track', () => {
+      let state = setQueue(createInitialQueueState(), tracks, 1) // Track 1 active
+      state = moveInQueue(state, 1, 3)
+
+      expect(state.queue.map((t) => t.id)).toEqual(['0', '2', '3', '1'])
+      expect(state.currentIndex).toBe(3)
+      expect(state.queue[state.currentIndex].id).toBe('1')
+    })
+
+    it('decrements currentIndex when moving a track from before to after active index', () => {
+      let state = setQueue(createInitialQueueState(), tracks, 2) // Track 2 active
+      state = moveInQueue(state, 0, 3)
+
+      expect(state.queue.map((t) => t.id)).toEqual(['1', '2', '3', '0'])
+      expect(state.currentIndex).toBe(1)
+      expect(state.queue[state.currentIndex].id).toBe('2')
+    })
+
+    it('increments currentIndex when moving a track from after to before active index', () => {
+      let state = setQueue(createInitialQueueState(), tracks, 1) // Track 1 active
+      state = moveInQueue(state, 3, 0)
+
+      expect(state.queue.map((t) => t.id)).toEqual(['3', '0', '1', '2'])
+      expect(state.currentIndex).toBe(2)
+      expect(state.queue[state.currentIndex].id).toBe('1')
+    })
+
+    it('ignores out-of-bounds or no-op moves', () => {
+      const state = setQueue(createInitialQueueState(), tracks, 1)
+      expect(moveInQueue(state, -1, 2)).toBe(state)
+      expect(moveInQueue(state, 1, 10)).toBe(state)
+      expect(moveInQueue(state, 1, 1)).toBe(state)
     })
   })
 })

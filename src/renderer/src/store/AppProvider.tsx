@@ -325,6 +325,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
           yukinon.ytm.setLock?.(false) // Release lock so user can interact with YTM freely
         }
       } else {
+        // If session was restored in stopped state with a valid queue item, start playing it
+        if (playerStateRef.current.status === 'stopped' && queue[currentQueueIndex]) {
+          play(queue[currentQueueIndex])
+          return
+        }
         if (activePlayerRef.current === localPlayerRef.current || activePlayerRef.current === radioPlayerRef.current || activePlayerRef.current === subsonicPlayerRef.current || activePlayerRef.current === jellyfinPlayerRef.current) {
           yukinon.ytm.setLock?.(true)
           ytmPlayerRef.current?.pause()
@@ -332,7 +337,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         activePlayerRef.current.resume()
       }
     }
-  }, [])
+  }, [queue, currentQueueIndex, play])
 
   const setQueue = useCallback(
     (newQueue: Track[], startIndex = 0) => {
@@ -392,6 +397,104 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       return newQueue
     })
   }, [])
+
+  const moveInQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueueState((prev) => {
+      if (
+        fromIndex < 0 ||
+        fromIndex >= prev.length ||
+        toIndex < 0 ||
+        toIndex >= prev.length ||
+        fromIndex === toIndex
+      ) {
+        return prev
+      }
+      const newQueue = [...prev]
+      const [moved] = newQueue.splice(fromIndex, 1)
+      newQueue.splice(toIndex, 0, moved)
+
+      setCurrentQueueIndex((prevIdx) => {
+        if (fromIndex === prevIdx) return toIndex
+        if (fromIndex < prevIdx && toIndex >= prevIdx) return prevIdx - 1
+        if (fromIndex > prevIdx && toIndex <= prevIdx) return prevIdx + 1
+        return prevIdx
+      })
+
+      return newQueue
+    })
+  }, [])
+
+  // Restore saved queue session on mount
+  const sessionRestoredRef = useRef(false)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('yukinon_saved_session')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed.queue) && parsed.queue.length > 0) {
+          const idx = Math.max(0, Math.min(Number(parsed.currentQueueIndex) || 0, parsed.queue.length - 1))
+          setQueueState(parsed.queue)
+          setCurrentQueueIndex(idx)
+          if (typeof parsed.shuffle === 'boolean') setShuffle(parsed.shuffle)
+          if (parsed.repeat === 'off' || parsed.repeat === 'all' || parsed.repeat === 'one') {
+            setRepeat(parsed.repeat)
+          }
+          const restoredTrack = parsed.queue[idx]
+          if (restoredTrack) {
+            currentTrackRef.current = restoredTrack
+            setPlayer({
+              currentTrackId: restoredTrack.id,
+              duration: restoredTrack.duration || 0,
+              status: 'stopped',
+              shuffle: !!parsed.shuffle,
+              repeat: parsed.repeat || 'off'
+            })
+          }
+        }
+      }
+    } catch {
+      // ignore invalid session
+    } finally {
+      sessionRestoredRef.current = true
+    }
+  }, [setPlayer])
+
+  // Persist queue session whenever queue/index/mode changes
+  useEffect(() => {
+    if (!sessionRestoredRef.current) return
+    try {
+      localStorage.setItem(
+        'yukinon_saved_session',
+        JSON.stringify({
+          queue: queue.slice(0, 500),
+          currentQueueIndex,
+          shuffle,
+          repeat
+        })
+      )
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [queue, currentQueueIndex, shuffle, repeat])
+
+  // Pre-buffer next local track in queue for gapless transitions
+  useEffect(() => {
+    if (!localPlayerRef.current || queue.length === 0) return
+    if (repeat === 'one') {
+      localPlayerRef.current.preloadNext(queue[currentQueueIndex] || null)
+      return
+    }
+    if (!shuffle) {
+      const nextIdx =
+        currentQueueIndex + 1 < queue.length
+          ? currentQueueIndex + 1
+          : repeat === 'all'
+          ? 0
+          : -1
+      const nextTrack = nextIdx >= 0 ? queue[nextIdx] : null
+      localPlayerRef.current.preloadNext(nextTrack)
+    }
+  }, [queue, currentQueueIndex, repeat, shuffle])
 
   // Initialize Players and Global Listeners
   useEffect(() => {
@@ -569,6 +672,86 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     [eqBands]
   )
 
+  // Synchronize player metadata with native MediaSession (MPRIS2 on Linux / Desktop media controls)
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      const currentTrack =
+        tracks.find((t) => t.id === player.currentTrackId) ||
+        queue.find((t) => t.id === player.currentTrackId)
+
+      let title = 'Nothing playing'
+      let artist = '—'
+      let album = ''
+      const artworkUrl = player.artwork || ''
+
+      if (player.source === 'ytm') {
+        title = player.ytmInfo?.title || 'YouTube Music'
+        artist = player.ytmInfo?.artist || ''
+      } else if (player.source === 'radio') {
+        title = player.radioInfo?.title || 'Internet Radio'
+        artist = player.radioInfo?.station || ''
+      } else if (player.source === 'subsonic') {
+        title = player.subsonicInfo?.title || 'Navidrome'
+        artist = player.subsonicInfo?.artist || ''
+      } else if (player.source === 'jellyfin') {
+        title = player.jellyfinInfo?.title || 'Jellyfin'
+        artist = player.jellyfinInfo?.artist || ''
+      } else if (currentTrack) {
+        title = currentTrack.title
+        artist = currentTrack.artist
+        album = currentTrack.album || ''
+      }
+
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title,
+          artist,
+          album,
+          artwork: artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/png' }] : []
+        })
+        navigator.mediaSession.playbackState = player.status === 'playing' ? 'playing' : 'paused'
+        if (player.duration > 0 && Number.isFinite(player.duration)) {
+          navigator.mediaSession.setPositionState?.({
+            duration: Math.max(0, player.duration),
+            playbackRate: 1,
+            position: Math.max(0, Math.min(player.position || 0, player.duration))
+          })
+        }
+      } catch {
+        // ignore MediaSession errors
+      }
+    }
+  }, [
+    player.currentTrackId,
+    player.status,
+    player.artwork,
+    player.position,
+    player.duration,
+    player.source,
+    player.ytmInfo,
+    player.radioInfo,
+    player.subsonicInfo,
+    player.jellyfinInfo,
+    tracks,
+    queue
+  ])
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.setActionHandler('play', () => togglePlayPause())
+        navigator.mediaSession.setActionHandler('pause', () => togglePlayPause())
+        navigator.mediaSession.setActionHandler('previoustrack', () => playPrev())
+        navigator.mediaSession.setActionHandler('nexttrack', () => playNext())
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime !== undefined) seekTo(details.seekTime)
+        })
+      } catch {
+        // ignore unsupported handlers
+      }
+    }
+  }, [togglePlayPause, playPrev, playNext, seekTo])
+
   return (
     <AppContext.Provider
       value={{
@@ -581,6 +764,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         playNextTrack,
         clearQueue,
         removeFromQueue,
+        moveInQueue,
         currentQueueIndex,
         shuffle,
         repeat,
