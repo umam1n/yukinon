@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Hybrid audiophile music player — local FLAC + YouTube Music with a 10-band EQ",
   "main": "out/main/index.js",
-  "author": "umam1n",
+  "author": "umam1n <umam1n@users.noreply.github.com>",
   "license": "MIT",
   "private": true,
   "type": "module",
