@@ -10,6 +10,7 @@ export interface Track {
   path?: string // Optional for remote sources
   streamUrl?: string // Optional for local sources
   title: string
+  trackNumber?: number
   artist: string
   album?: string
   albumArtist?: string

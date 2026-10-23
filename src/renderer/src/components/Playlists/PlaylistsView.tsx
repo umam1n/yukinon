@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../store/AppContext'
 import { ListMusic, Plus, Trash2, Play, Shuffle, Disc, X, Sparkles, ArrowLeft } from 'lucide-react'
-import type { Track } from '../../../../shared/types'
+import type { Track } from '@shared/types'
 import CreateSmartPlaylistModal from './CreateSmartPlaylistModal'
 import TrackList from '../Library/TrackList'
 

@@ -4,7 +4,8 @@ import {
   Music2, Shuffle, Repeat, Sparkles, Repeat1, PictureInPicture2
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
-import type { Track } from '../../../../../shared/types'
+import { usePlayerPosition } from '../store/positionStore'
+import type { Track } from '@shared/types'
 
 function formatTime(secs: number): string {
   if (!secs || isNaN(secs)) return '0:00'
@@ -15,6 +16,7 @@ function formatTime(secs: number): string {
 
 export default function NowPlaying(): React.ReactElement {
   const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, setVolume, shuffle, repeat, toggleShuffle, toggleRepeat, isSmartPlay, toggleSmartPlay, setActiveView, renderAlbumArt, toggleMiniPlayer } = useApp()
+  const position = usePlayerPosition()
   const [isMuted, setIsMuted] = useState(false)
   const prevVolumeRef = useRef(player.volume > 0 ? player.volume : 0.5)
   const [dragPosition, setDragPosition] = useState<number | null>(null)
@@ -67,7 +69,7 @@ export default function NowPlaying(): React.ReactElement {
   }, [isMuted, player.volume, setVolume])
 
   const progressPercent =
-    player.duration > 0 ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100 : 0
+    player.duration > 0 ? ((dragPosition !== null ? dragPosition : position) / player.duration) * 100 : 0
 
   return (
     <div
@@ -104,7 +106,7 @@ export default function NowPlaying(): React.ReactElement {
           className="progress-slider"
           min={0}
           max={player.duration || 0}
-          value={dragPosition !== null ? dragPosition : player.position}
+          value={dragPosition !== null ? dragPosition : position}
           step={0.5}
           onChange={handleSeekChange}
           onMouseUp={handleSeekEnd}
@@ -221,7 +223,7 @@ export default function NowPlaying(): React.ReactElement {
           </div>
           {currentTrack && player.source === 'local' && (
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
-              {currentTrack.format.toUpperCase()}
+              {currentTrack.format?.toUpperCase()}
               {currentTrack.bitDepth ? ` · ${currentTrack.bitDepth}bit` : ''}
               {currentTrack.sampleRate ? ` · ${(currentTrack.sampleRate / 1000).toFixed(1)}kHz` : ''}
             </div>
@@ -303,7 +305,7 @@ export default function NowPlaying(): React.ReactElement {
 
         {/* Time */}
         <div style={{ fontSize: 11, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums', fontFamily: 'JetBrains Mono, monospace' }}>
-          {formatTime(dragPosition !== null ? dragPosition : player.position)} / {formatTime(player.duration)}
+          {formatTime(dragPosition !== null ? dragPosition : position)} / {formatTime(player.duration)}
         </div>
       </div>
 

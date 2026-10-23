@@ -1,20 +1,20 @@
-import { app, shell, BrowserView, BrowserWindow, ipcMain as IpcMain, session } from 'electron'
+import { app, shell, WebContentsView, BrowserWindow, ipcMain as IpcMain, session } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { setupAdblocker } from './adblocker'
 import { getSetting } from './db'
 
-export let ytmView: BrowserView | null = null
+export let ytmView: WebContentsView | null = null
 
 export function getCleanChromeUA(): string {
   const base = session.defaultSession.getUserAgent() || app.userAgentFallback || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
   return base.replace(/Electron\/[0-9\.]+\s?/, '').replace(/Yukinon\/[0-9\.]+\s?/, '').trim()
 }
 
-export function getOrCreateYTMView(): BrowserView {
+export function getOrCreateYTMView(): WebContentsView {
   if (ytmView) return ytmView
 
-  ytmView = new BrowserView({
+  ytmView = new WebContentsView({
     webPreferences: {
       partition: 'persist:ytm',
       preload: join(__dirname, '../preload/ytm.cjs'),
@@ -167,6 +167,23 @@ function buildYTMCSS(accent: string, themeMode: string): string {
   `
 }
 
+export function isYTMViewAttached(mainWindow: BrowserWindow): boolean {
+  return !!ytmView && mainWindow.contentView.children.includes(ytmView)
+}
+
+// Fill the content area beside the sidebar and above the player bar
+export function layoutYTMView(mainWindow: BrowserWindow): void {
+  if (!isYTMViewAttached(mainWindow)) return
+  const [w, h] = mainWindow.getContentSize()
+  const sidebarWidth = w < 720 ? (w < 500 ? 0 : 52) : 72
+  ytmView!.setBounds({
+    x: sidebarWidth,
+    y: 0,
+    width: Math.max(0, w - sidebarWidth),
+    height: Math.max(0, h - 110)
+  })
+}
+
 export function registerYTMHandlers(
   ipc: typeof IpcMain,
   mainWindow: BrowserWindow
@@ -174,24 +191,15 @@ export function registerYTMHandlers(
   // Show YTM panel
   ipc.handle('ytm:show', () => {
     const view = getOrCreateYTMView()
-    const [w, h] = mainWindow.getContentSize()
-    if (!mainWindow.getBrowserViews().includes(view)) {
-      mainWindow.addBrowserView(view)
-    }
-    const sidebarWidth = w < 720 ? (w < 500 ? 0 : 52) : 72
-    view.setBounds({
-      x: sidebarWidth,
-      y: 0,
-      width: Math.max(0, w - sidebarWidth),
-      height: Math.max(0, h - 110)
-    })
-    mainWindow.setTopBrowserView(view)
+    // addChildView also moves an existing child to the top
+    mainWindow.contentView.addChildView(view)
+    layoutYTMView(mainWindow)
   })
 
   // Hide YTM panel
   ipc.handle('ytm:hide', () => {
-    if (ytmView && mainWindow.getBrowserViews().includes(ytmView)) {
-      mainWindow.removeBrowserView(ytmView)
+    if (isYTMViewAttached(mainWindow)) {
+      mainWindow.contentView.removeChildView(ytmView!)
     }
   })
 

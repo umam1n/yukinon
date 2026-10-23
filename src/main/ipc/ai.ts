@@ -1,4 +1,4 @@
-import { ipcMain as IpcMain } from 'electron'
+import { ipcMain as IpcMain, safeStorage } from 'electron'
 import { getDb, getSetting, setSetting } from '../db'
 import { sanitizeSqlFilter } from '../lib/sqlSanitizer'
 
@@ -122,16 +122,43 @@ async function callGemini(apiKey: string, prompt: string, systemInstruction?: st
   throw lastError || new Error('Failed to communicate with Gemini API')
 }
 
+const API_KEY_SETTING = 'gemini_api_key'
+
+// Stored as { enc: base64 } via the OS keychain when available; older installs stored plain text
+function getStoredApiKey(): string {
+  const stored = getSetting(API_KEY_SETTING) as string | { enc: string } | null
+  if (typeof stored === 'string') {
+    if (stored && safeStorage.isEncryptionAvailable()) storeApiKey(stored)
+    return stored.trim()
+  }
+  if (stored && typeof stored.enc === 'string') {
+    try {
+      return safeStorage.decryptString(Buffer.from(stored.enc, 'base64')).trim()
+    } catch (err) {
+      console.error('[AI] Failed to decrypt stored Gemini API key:', err)
+    }
+  }
+  return ''
+}
+
+function storeApiKey(apiKey: string): void {
+  const key = apiKey.trim()
+  if (key && safeStorage.isEncryptionAvailable()) {
+    setSetting(API_KEY_SETTING, { enc: safeStorage.encryptString(key).toString('base64') })
+  } else {
+    setSetting(API_KEY_SETTING, key)
+  }
+}
+
 export function registerAiHandlers(ipc: typeof IpcMain): void {
   // Get stored API key
   ipc.handle('ai:getApiKey', () => {
-    const key = getSetting('gemini_api_key')
-    return typeof key === 'string' ? key : ''
+    return getStoredApiKey()
   })
 
   // Set API key
   ipc.handle('ai:setApiKey', (_, apiKey: string) => {
-    setSetting('gemini_api_key', (apiKey || '').trim())
+    storeApiKey(apiKey || '')
     return { success: true }
   })
 
@@ -161,8 +188,7 @@ export function registerAiHandlers(ipc: typeof IpcMain): void {
     async (_, params: { prompt: string; apiKey?: string }) => {
       let key = (params.apiKey || '').trim()
       if (!key) {
-        const stored = getSetting('gemini_api_key')
-        if (typeof stored === 'string') key = stored.trim()
+        key = getStoredApiKey()
       }
       if (!key) {
         throw new Error('Gemini API key is not configured. Please add one in Settings.')
@@ -208,8 +234,7 @@ export function registerAiHandlers(ipc: typeof IpcMain): void {
     async (_, params?: { trackIds?: string[]; apiKey?: string }) => {
       let key = (params?.apiKey || '').trim()
       if (!key) {
-        const stored = getSetting('gemini_api_key')
-        if (typeof stored === 'string') key = stored.trim()
+        key = getStoredApiKey()
       }
       if (!key) {
         throw new Error('Gemini API key is not configured. Please add one in Settings.')

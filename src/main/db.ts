@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
-import type { EQBands } from '../../shared/types'
+import { existsSync, readdirSync } from 'fs'
+import type { EQBands } from '@shared/types'
+import { fileURLToPath } from 'url'
+import { artworkUrl } from './lib/paths'
 
 let db: Database.Database
 
@@ -15,6 +18,7 @@ export const DB_SCHEMA_SQL = `
     album_artist TEXT,
     year INTEGER,
     genre TEXT,
+    track_number INTEGER,
     duration REAL,
     artwork TEXT,
     format TEXT,
@@ -128,6 +132,9 @@ export function initDatabase(): void {
   try {
     db.exec('ALTER TABLE tracks ADD COLUMN replaygain_track_peak REAL;')
   } catch (e) { /* ignore */ }
+  try {
+    db.exec('ALTER TABLE tracks ADD COLUMN track_number INTEGER;')
+  } catch (e) { /* ignore */ }
 
   try {
     db.exec("ALTER TABLE playlists ADD COLUMN type TEXT DEFAULT 'static';")
@@ -167,14 +174,62 @@ export function initDatabase(): void {
     }
   } catch (e) { console.error('[DB] Playlist migration failed', e); }
 
-  // Clear base64 artworks to fix 2GB freeze
-  const hasArtworks = db.prepare('SELECT 1 FROM tracks WHERE artwork IS NOT NULL LIMIT 1').get()
-  if (hasArtworks) {
+  // Clear legacy base64 artworks (caused a 2GB freeze); file-based artwork is kept
+  const hasBase64Artworks = db.prepare("SELECT 1 FROM tracks WHERE artwork LIKE 'data:%' LIMIT 1").get()
+  if (hasBase64Artworks) {
     console.log('[DB] Clearing base64 artworks to reclaim memory/disk space...')
-    db.exec('UPDATE tracks SET artwork = NULL;')
+    db.exec("UPDATE tracks SET artwork = NULL WHERE artwork LIKE 'data:%';")
     db.exec('VACUUM;')
     console.log('[DB] Migration complete.')
   }
+
+  // Serve artwork through yukinon:// instead of file:// (file:// is blocked in the renderer)
+  const fileArtworks = db.prepare("SELECT id, artwork FROM tracks WHERE artwork LIKE 'file://%'").all() as {
+    id: string
+    artwork: string
+  }[]
+  if (fileArtworks.length > 0) {
+    const update = db.prepare('UPDATE tracks SET artwork = ? WHERE id = ?')
+    db.transaction(() => {
+      for (const row of fileArtworks) {
+        try {
+          update.run(artworkUrl(fileURLToPath(row.artwork)), row.id)
+        } catch {
+          update.run(artworkUrl(row.artwork.replace(/^file:\/\//, '')), row.id)
+        }
+      }
+    })()
+  }
+
+  restoreArtworkLinks()
+}
+
+// An earlier migration nulled every artwork column on each launch even though the files
+// (named <track id>.<ext>) were still on disk. Relink them once.
+function restoreArtworkLinks(): void {
+  if (getSetting('artwork_relinked_v1')) return
+  const dir = getArtworksDir()
+  if (existsSync(dir)) {
+    const files = new Set(readdirSync(dir))
+    const rows = db.prepare('SELECT id FROM tracks WHERE artwork IS NULL').all() as { id: string }[]
+    const update = db.prepare('UPDATE tracks SET artwork = ? WHERE id = ?')
+    let restored = 0
+    db.transaction(() => {
+      for (const { id } of rows) {
+        const file = ['jpg', 'png'].map((ext) => `${id}.${ext}`).find((name) => files.has(name))
+        if (file) {
+          update.run(artworkUrl(join(dir, file)), id)
+          restored++
+        }
+      }
+    })()
+    if (restored > 0) console.log(`[DB] Relinked artwork for ${restored} tracks`)
+  }
+  setSetting('artwork_relinked_v1', true)
+}
+
+export function getArtworksDir(): string {
+  return join(app.getPath('userData'), 'artworks')
 }
 
 export function getDb(): Database.Database {

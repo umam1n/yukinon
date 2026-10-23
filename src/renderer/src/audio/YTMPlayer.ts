@@ -1,4 +1,4 @@
-import type { PlayerState } from '../../../../shared/types'
+import type { PlayerState } from '@shared/types'
 import type { IPlayerProvider } from './IPlayerProvider'
 
 export class YTMPlayer implements IPlayerProvider {

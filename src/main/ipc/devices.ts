@@ -1,6 +1,6 @@
 import { ipcMain as IpcMain } from 'electron'
 import { getDb } from '../db'
-import type { DeviceProfile, EQBands } from '../../../shared/types'
+import type { DeviceProfile, EQBands } from '@shared/types'
 
 const FLAT_BANDS: EQBands = { 32: 0, 64: 0, 125: 0, 250: 0, 500: 0, 1000: 0, 2000: 0, 4000: 0, 8000: 0, 16000: 0 }
 

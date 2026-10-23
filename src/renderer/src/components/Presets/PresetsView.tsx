@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Search, TrendingUp, Clock, Upload, ThumbsUp, Cpu, Tag } from 'lucide-react'
 import { fetchCommunityPresets, publishPreset, upvotePreset, GENRES } from '../../lib/presets'
 import { useApp } from '../../store/AppContext'
-import type { CommunityPreset } from '../../../../../../shared/types'
+import type { CommunityPreset } from '@shared/types'
 
 export default function PresetsView(): React.ReactElement {
   const { eqBands, applyEqPreset, eqPresets } = useApp()
@@ -12,6 +12,7 @@ export default function PresetsView(): React.ReactElement {
   const [sortBy, setSortBy] = useState<'upvotes' | 'newest'>('upvotes')
   const [selectedGenre, setSelectedGenre] = useState('Any')
   const [deviceSearch, setDeviceSearch] = useState('')
+  const [debouncedDeviceSearch, setDebouncedDeviceSearch] = useState('')
   const [publishModalOpen, setPublishModalOpen] = useState(false)
 
   const load = useCallback(async () => {
@@ -20,24 +21,34 @@ export default function PresetsView(): React.ReactElement {
     try {
       const data = await fetchCommunityPresets({
         genre: selectedGenre === 'Any' ? undefined : selectedGenre,
-        deviceModel: deviceSearch || undefined,
+        deviceModel: debouncedDeviceSearch || undefined,
         sortBy
       })
       setPresets(data)
     } catch (e) {
-      setError('Could not load community presets. Check your Supabase settings.')
+      setError('Could not load community presets. Check VITE_PRESETS_API_URL and your connection.')
     } finally {
       setLoading(false)
     }
-  }, [sortBy, selectedGenre, deviceSearch])
+  }, [sortBy, selectedGenre, debouncedDeviceSearch])
+
+  // Each request round-trips through Apps Script, so don't fire one per keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedDeviceSearch(deviceSearch.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [deviceSearch])
 
   useEffect(() => {
     load()
   }, [load])
 
   const handleUpvote = useCallback(async (id: string) => {
-    await upvotePreset(id)
-    setPresets((prev) => prev.map((p) => (p.id === id ? { ...p, upvotes: p.upvotes + 1 } : p)))
+    try {
+      const upvotes = await upvotePreset(id)
+      setPresets((prev) => prev.map((p) => (p.id === id ? { ...p, upvotes } : p)))
+    } catch (e) {
+      console.warn('[Yukinon] Upvote failed:', e)
+    }
   }, [])
 
   const handleApply = useCallback(
@@ -354,7 +365,7 @@ function PublishModal({
       await publishPreset(title, authorName || 'Anonymous', bands, deviceModel || undefined, genre || undefined)
       onPublished()
     } catch (e) {
-      setErr('Failed to publish. Check your Supabase connection.')
+      setErr(e instanceof Error ? e.message : 'Failed to publish.')
     } finally {
       setPublishing(false)
     }

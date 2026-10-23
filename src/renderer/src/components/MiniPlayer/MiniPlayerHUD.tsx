@@ -1,6 +1,7 @@
 import React from 'react'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, Music2, Volume2, VolumeX } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
+import { usePlayerPosition } from '../../store/positionStore'
 
 function formatTime(secs: number): string {
   if (!secs || isNaN(secs)) return '0:00'
@@ -11,6 +12,7 @@ function formatTime(secs: number): string {
 
 export default function MiniPlayerHUD(): React.ReactElement {
   const { player, tracks, queue, togglePlayPause, playNext, playPrev, seekTo, toggleMiniPlayer, setVolume } = useApp()
+  const position = usePlayerPosition()
 
   const currentTrack =
     tracks.find((t) => t.id === player.currentTrackId) ||
@@ -32,7 +34,7 @@ export default function MiniPlayerHUD(): React.ReactElement {
     player.jellyfinInfo?.artist ||
     'Yukinon'
 
-  const progressPercent = player.duration > 0 ? Math.min(100, (player.position / player.duration) * 100) : 0
+  const progressPercent = player.duration > 0 ? Math.min(100, (position / player.duration) * 100) : 0
 
   const handleSeekClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!player.duration) return
@@ -281,7 +283,7 @@ export default function MiniPlayerHUD(): React.ReactElement {
             fontFamily: 'JetBrains Mono, monospace'
           }}
         >
-          <span>{formatTime(player.position)}</span>
+          <span>{formatTime(position)}</span>
           <span>{formatTime(player.duration)}</span>
         </div>
       </div>

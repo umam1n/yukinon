@@ -23,11 +23,11 @@ export const ALLOWED_COLUMNS = new Set([
 ])
 
 const FORBIDDEN_PATTERNS = [
-  /;/g,
-  /--/g,
-  /\/\*/g,
-  /\*\//g,
-  /\b(drop|delete|insert|update|alter|create|exec|pragma|attach|detach|union|vacuum|into|values)\b/gi
+  /;/,
+  /--/,
+  /\/\*/,
+  /\*\//,
+  /\b(drop|delete|insert|update|alter|create|exec|pragma|attach|detach|union|vacuum|into|values)\b/i
 ]
 
 export function sanitizeSqlFilter(rawFilter?: string): string {

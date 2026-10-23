@@ -14,7 +14,7 @@ function sendStateUpdate() {
   const artwork = document.querySelector('.image.ytmusic-player-bar, #thumbnail img, .thumbnail img')?.getAttribute('src') || ''
   
   // YouTube Music uses .html5-main-video for the active player. Grabbing just 'video' might grab hidden ad videos.
-  const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
+  const video = document.querySelector<HTMLVideoElement>('video.html5-main-video') || document.querySelector('video')
   
   const duration = Math.floor(video?.duration || 0)
   const position = Math.floor(video?.currentTime || 0)
@@ -54,7 +54,7 @@ function skipAds() {
     (adModule && adModule.offsetParent !== null && adModule.children.length > 0)
   )
 
-  const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
+  const video = document.querySelector<HTMLVideoElement>('video.html5-main-video') || document.querySelector('video')
   if (isVideoAd && video && isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration) {
     video.muted = true
     video.playbackRate = 16.0
@@ -102,7 +102,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   setInterval(() => {
     // Re-attach to video if YTM creates a new one (track change)
-    const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
+    const video = document.querySelector<HTMLVideoElement>('video.html5-main-video') || document.querySelector('video')
     if (video && !video.hasAttribute('data-yukinon-attached')) {
       attachVideoListeners()
     }
@@ -124,7 +124,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // 4. IPC: Volume control from main process
 ipcRenderer.on('ytm:set-volume', (_, vol: number) => {
   lockedVolume = vol
-  const video = document.querySelector('video.html5-main-video') || document.querySelector('video')
+  const video = document.querySelector<HTMLVideoElement>('video.html5-main-video') || document.querySelector('video')
   if (video) video.volume = vol
 })
 }

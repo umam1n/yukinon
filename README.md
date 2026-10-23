@@ -16,7 +16,7 @@
 - **Navidrome / Subsonic Integration** — Seamlessly query, browse, and queue tracks from any Subsonic API-compatible server.
 - **YouTube Music Integration** — Embedded isolation-aware Chromium view with integrated ad blocking via [@ghostery/adblocker-electron](https://github.com/ghostery/adblocker).
 - **10-Band EQ & Device Profiles** — Web Audio API-powered equalizer that applies in real-time to all local and remote streams. Saves device-aware profiles so it automatically switches EQ presets when you connect different headphones or DACs.
-- **Community Preset Store** — Browse, search, upvote, and publish custom EQ presets tagged by device model and music genre, powered by Supabase.
+- **Community Preset Store** — Browse, search, upvote, and publish custom EQ presets tagged by device model and music genre, backed by a Google Sheet via Apps Script.
 
 ---
 
@@ -48,7 +48,7 @@ This project was built out of a passion for high-fidelity audio and self-hosted 
 2. Configure Environment variables:
    ```bash
    cp .env.example .env
-   # Edit .env and insert your Supabase credentials (optional for community presets)
+   # Optional: set VITE_PRESETS_API_URL for community presets
    ```
 
 3. Install dependencies and run in development:
@@ -57,12 +57,8 @@ This project was built out of a passion for high-fidelity audio and self-hosted 
    npm run dev
    ```
 
-### Supabase Setup (Optional)
-If you want to use the community EQ sharing features:
-1. Open your Supabase project dashboard.
-2. Go to the **SQL Editor**.
-3. Paste and run the contents of `supabase_migration.sql` to initialize the database tables.
-4. Copy your project URL and `anon` key into your `.env` file.
+### Community Presets Setup (Optional)
+Community EQ sharing uses a Google Sheet plus a small Apps Script web app. You don't need a server or a database. Follow [`backend/presets-appscript/README.md`](backend/presets-appscript/README.md), then put the web app URL in `.env` as `VITE_PRESETS_API_URL`.
 
 ---
 

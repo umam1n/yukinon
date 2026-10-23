@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../../store/AppContext'
 import { Music2, PlusCircle, ListPlus, ListEnd, ArrowUp, ArrowDown, Play, Trash2, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
-import type { Track } from '../../../../../../shared/types'
+import type { Track } from '@shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
 import EditMetadataModal from './EditMetadataModal'
 import { calculateVirtualWindow } from '../../lib/virtualList'

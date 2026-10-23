@@ -1,5 +1,5 @@
 import { audioEngine } from './AudioEngine'
-import type { Track, PlayerState } from '../../../../shared/types'
+import type { Track, PlayerState } from '@shared/types'
 import type { IPlayerProvider } from './IPlayerProvider'
 import { getStreamUrl } from '../lib/subsonic'
 

@@ -1,4 +1,4 @@
-import type { EQBands, Track } from '../../../../shared/types'
+import type { EQBands, Track } from '@shared/types'
 
 export function calculateReplayGainTarget(
   track: Pick<Track, 'replaygainTrackGain' | 'replaygainTrackPeak'> | null | undefined,

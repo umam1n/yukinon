@@ -12,7 +12,7 @@ import {
   getPlaylists,
   type JellyfinConfig
 } from '../../lib/jellyfin'
-import type { Track } from '../../../../shared/types'
+import type { Track } from '@shared/types'
 import AddToPlaylistModal from '../Playlists/AddToPlaylistModal'
 import TrackList from '../Library/TrackList'
 

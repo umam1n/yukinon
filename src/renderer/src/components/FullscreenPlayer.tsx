@@ -4,6 +4,7 @@ import {
   Music2, Shuffle, Repeat, Repeat1, Minimize2, ListMusic
 } from 'lucide-react'
 import { useApp } from '../store/AppContext'
+import { usePlayerPosition } from '../store/positionStore'
 import { fetchLyrics, parseLRC, type LyricLine } from '../lib/lyrics'
 
 function formatTime(secs: number): string {
@@ -15,6 +16,7 @@ function formatTime(secs: number): string {
 
 export default function FullscreenPlayer(): React.ReactElement {
   const { player, tracks, togglePlayPause, playNext, playPrev, setPlayer, shuffle, repeat, toggleShuffle, toggleRepeat, setActiveView, setVolume, seekTo, renderAlbumArt, reduceBlur } = useApp()
+  const position = usePlayerPosition()
   const [isMuted, setIsMuted] = useState(false)
   const prevVolumeRef = useRef(player.volume > 0 ? player.volume : 0.5)
   const [showLyrics, setShowLyrics] = useState(false)
@@ -65,7 +67,7 @@ export default function FullscreenPlayer(): React.ReactElement {
     }
   }
 
-  const effectiveTime = Math.max(0, player.position + lyricsOffset)
+  const effectiveTime = Math.max(0, position + lyricsOffset)
 
   const title = player.source === 'ytm' ? player.ytmInfo?.title || 'YouTube Music' : player.source === 'radio' ? player.radioInfo?.title || 'Internet Radio' : player.source === 'subsonic' ? player.subsonicInfo?.title || 'Navidrome' : player.source === 'jellyfin' ? player.jellyfinInfo?.title || 'Jellyfin' : currentTrack?.title || 'Nothing playing'
   const artist = player.source === 'ytm' ? player.ytmInfo?.artist || '' : player.source === 'radio' ? player.radioInfo?.station || '' : player.source === 'subsonic' ? player.subsonicInfo?.artist || '' : player.source === 'jellyfin' ? player.jellyfinInfo?.artist || '' : currentTrack?.artist || '—'
@@ -137,7 +139,7 @@ export default function FullscreenPlayer(): React.ReactElement {
     }
   }, [isMuted, player.volume, setVolume])
 
-  const progressPercent = player.duration > 0 ? ((dragPosition !== null ? dragPosition : player.position) / player.duration) * 100 : 0
+  const progressPercent = player.duration > 0 ? ((dragPosition !== null ? dragPosition : position) / player.duration) * 100 : 0
 
   // Calculate active lyric index
   let activeLyricIndex = -1
@@ -303,7 +305,7 @@ export default function FullscreenPlayer(): React.ReactElement {
                   type="range"
                   min={0}
                   max={player.duration || 0}
-                  value={dragPosition !== null ? dragPosition : player.position}
+                  value={dragPosition !== null ? dragPosition : position}
                   step={0.5}
                   onChange={handleSeekChange}
                   onMouseUp={handleSeekEnd}
@@ -320,7 +322,7 @@ export default function FullscreenPlayer(): React.ReactElement {
                 }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                <span>{formatTime(dragPosition !== null ? dragPosition : player.position)}</span>
+                <span>{formatTime(dragPosition !== null ? dragPosition : position)}</span>
                 <span>{formatTime(player.duration)}</span>
               </div>
             </div>

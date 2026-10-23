@@ -1,13 +1,16 @@
-import { createContext, useContext } from 'react'
-import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '../../../../shared/types'
+import { createContext, useContext, type Dispatch, type SetStateAction } from 'react'
+import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '@shared/types'
+
+// Position is excluded: it updates every second, so read it with usePlayerPosition() instead
+export type PlayerSnapshot = Omit<PlayerState, 'position'>
 
 export interface AppContextType {
   // Library
   tracks: Track[]
-  setTracks: (tracks: Track[]) => void
+  setTracks: Dispatch<SetStateAction<Track[]>>
 
   // Player
-  player: PlayerState
+  player: PlayerSnapshot
   setPlayer: (state: Partial<PlayerState>) => void
   play: (track: Track) => Promise<void>
   togglePlayPause: () => void
@@ -71,7 +74,7 @@ export interface AppContextType {
 
   // Notifications
   notification: { message: string; type: 'success' | 'error' } | null
-  notify: (message: string, type: 'success' | 'error') => void
+  notify: (message: string, type?: 'success' | 'error') => void
 }
 
 export type AppStore = AppContextType

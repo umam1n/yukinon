@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
-import type { Track } from '../../../../shared/types'
+import type { Track } from '@shared/types'
 
 interface AddToPlaylistModalProps {
   track: Track | null

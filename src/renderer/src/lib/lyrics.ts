@@ -5,13 +5,13 @@ export interface LyricLine {
 
 export async function fetchLyrics(
   source: string,
-  id: string,
+  id: string | null,
   title: string,
   artist: string,
   duration?: number
 ): Promise<string | null> {
   // 1. Check local file or embedded tags if source is 'local'
-  if (source === 'local') {
+  if (source === 'local' && id) {
     try {
       const localLyrics = await window.yukinon.library.getLyrics(id)
       if (localLyrics && localLyrics.trim().length > 0) {

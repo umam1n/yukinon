@@ -1,8 +1,8 @@
-import { app, shell, BrowserWindow, BrowserView, ipcMain, globalShortcut, session, protocol, net } from 'electron'
-import { join, extname } from 'path'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, protocol, net, session } from 'electron'
+import { join, extname, sep } from 'path'
 import { statSync, createReadStream, existsSync } from 'fs'
 import { Readable } from 'stream'
-import { pathToFileURL } from 'url'
+import { fileURLToPath } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerLibraryHandlers } from './ipc/library'
 import { registerPlaylistsHandlers } from './ipc/playlists'
@@ -10,8 +10,9 @@ import { registerEQHandlers } from './ipc/eq'
 import { registerDeviceHandlers } from './ipc/devices'
 import { registerThemeHandlers } from './ipc/theme'
 import { registerAiHandlers } from './ipc/ai'
-import { registerYTMHandlers, ytmView } from './ytm'
-import { initDatabase, getSetting, setSetting } from './db'
+import { registerYTMHandlers, layoutYTMView } from './ytm'
+import { initDatabase, getDb, getSetting, setSetting, getArtworksDir } from './db'
+import { isPathInsideFolders, isUrlAllowed, getConfiguredOrigin } from './lib/protocolGuard'
 import { initLibraryWatcher } from './watcher'
 import crypto from 'crypto'
 
@@ -23,11 +24,15 @@ const AUDIO_MIME_TYPES: Record<string, string> = {
   '.m4a': 'audio/mp4',
   '.aac': 'audio/aac',
   '.opus': 'audio/opus',
-  '.aiff': 'audio/aiff'
+  '.aiff': 'audio/aiff',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png'
 }
 
 let mainWindow: BrowserWindow
 let isMiniPlayer = false
+let isQuitting = false
 let normalBounds = { x: 0, y: 0, width: 1400, height: 900 }
 
 // Hardware Acceleration is critical for CSS performance (blur, gradients, transform)
@@ -47,8 +52,6 @@ const baseUA = app.userAgentFallback || 'Mozilla/5.0 (X11; Linux x86_64) AppleWe
 app.userAgentFallback = baseUA.replace(/Electron\/[0-9\.]+\s?/, '').replace(/Yukinon\/[0-9\.]+\s?/, '').trim()
 
 async function createWindow(): Promise<void> {
-  await initDatabase()
-
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -64,15 +67,26 @@ async function createWindow(): Promise<void> {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false // allow file:// access for local tracks
+      // Off so Jellyfin/Subsonic/LRCLIB calls work without server CORS headers;
+      // file:// access is restricted separately in restrictFileAccess()
+      webSecurity: false
     },
     alwaysOnTop: !!getSetting('always_on_top')
   })
 
   initLibraryWatcher(mainWindow)
+
+  // On macOS keep the window alive when closed: IPC handlers hold a reference to it,
+  // so re-creating it on 'activate' would leave them talking to a destroyed window
+  mainWindow.on('close', (event) => {
+    if (process.platform === 'darwin' && !isQuitting) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -81,17 +95,7 @@ async function createWindow(): Promise<void> {
 
   mainWindow.on('resize', () => {
     if (isMiniPlayer) return
-    const [w, h] = mainWindow.getContentSize()
-    // If YTM is active, update its bounds to fill content area (minus sidebar)
-    if (ytmView && mainWindow.getBrowserViews().includes(ytmView)) {
-      const sidebarWidth = w < 720 ? (w < 500 ? 0 : 52) : 72
-      ytmView.setBounds({
-        x: sidebarWidth,
-        y: 0,
-        width: Math.max(0, w - sidebarWidth),
-        height: Math.max(0, h - 110)
-      })
-    }
+    layoutYTMView(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -112,6 +116,59 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'yukinon', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } }
 ])
 
+function isLocalPathAllowed(filePath: string): boolean {
+  const known = getDb().prepare('SELECT 1 FROM tracks WHERE path = ?').get(filePath)
+  if (known) return true
+  return isPathInsideFolders(filePath, [getArtworksDir(), ...((getSetting('music_folders') as string[]) || [])])
+}
+
+// webSecurity is off (remote API calls rely on it), which would let the renderer fetch any
+// file:// URL. Only the bundled renderer files may be loaded over file://; media and artwork
+// go through yukinon://, which has its own path checks.
+function restrictFileAccess(): void {
+  const rendererDir = join(__dirname, '../renderer') + sep
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, (details, callback) => {
+    let allowed = false
+    try {
+      allowed = fileURLToPath(details.url).startsWith(rendererDir)
+    } catch {
+      allowed = false
+    }
+    if (!allowed) console.warn('[Security] Blocked file:// request:', details.url)
+    callback({ cancel: !allowed })
+  })
+}
+
+function isRemoteUrlAllowed(targetUrl: string): boolean {
+  return isUrlAllowed(targetUrl, [
+    getConfiguredOrigin(getSetting('jellyfin_config')),
+    getConfiguredOrigin(getSetting('subsonic_config'))
+  ])
+}
+
+// Keys the renderer may read/write through the generic settings:* IPC channels
+const RENDERER_SETTINGS_KEYS = new Set([
+  'active_modules',
+  'jellyfin_config',
+  'subsonic_config',
+  'reduce_blur',
+  'render_album_art',
+  'replaygain_enabled',
+  'replaygain_preamp'
+])
+
+type CustomHotkeys = { playPause?: string; nextTrack?: string; prevTrack?: string }
+
+const DEFAULT_HOTKEYS: CustomHotkeys = {
+  playPause: 'MediaPlayPause',
+  nextTrack: 'MediaNextTrack',
+  prevTrack: 'MediaPreviousTrack'
+}
+
+function getCustomHotkeys(): CustomHotkeys {
+  return (getSetting('custom_hotkeys') as CustomHotkeys | null) || DEFAULT_HOTKEYS
+}
+
 function setupGlobalShortcuts(): void {
   globalShortcut.unregisterAll()
   
@@ -119,11 +176,7 @@ function setupGlobalShortcuts(): void {
   const setting = getSetting('global_hotkeys')
   const hotkeysEnabled = setting !== 0
   
-  const customHotkeys = (getSetting('custom_hotkeys') as any) || {
-    playPause: 'MediaPlayPause',
-    nextTrack: 'MediaNextTrack',
-    prevTrack: 'MediaPreviousTrack'
-  }
+  const customHotkeys = getCustomHotkeys()
 
   try {
     if (customHotkeys.playPause) globalShortcut.register(customHotkeys.playPause, () => mainWindow.webContents.send('media:playPause'))
@@ -153,6 +206,9 @@ app.whenReady().then(async () => {
       }
 
       if (filePath) {
+        if (!isLocalPathAllowed(filePath)) {
+          return new Response('Forbidden', { status: 403 })
+        }
         if (!existsSync(filePath)) {
           return new Response('File not found', { status: 404 })
         }
@@ -211,6 +267,9 @@ app.whenReady().then(async () => {
       }
 
       if (targetUrl) {
+        if (!isRemoteUrlAllowed(targetUrl)) {
+          return new Response('Forbidden', { status: 403 })
+        }
         const response = await net.fetch(targetUrl, {
           method: request.method,
           headers: request.headers,
@@ -235,6 +294,8 @@ app.whenReady().then(async () => {
     }
   })
   electronApp.setAppUserModelId('com.umam1n.yukinon')
+  initDatabase()
+  restrictFileAccess()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -258,8 +319,14 @@ app.whenReady().then(async () => {
   })
 
   // Settings
-  ipcMain.handle('settings:get', (_, key: string) => getSetting(key))
-  ipcMain.handle('settings:set', (_, key: string, value: any) => setSetting(key, value))
+  ipcMain.handle('settings:get', (_, key: string) => {
+    if (!RENDERER_SETTINGS_KEYS.has(key)) throw new Error(`Setting not accessible: ${key}`)
+    return getSetting(key)
+  })
+  ipcMain.handle('settings:set', (_, key: string, value: unknown) => {
+    if (!RENDERER_SETTINGS_KEYS.has(key)) throw new Error(`Setting not accessible: ${key}`)
+    setSetting(key, value)
+  })
 
   // Window controls
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
@@ -308,21 +375,21 @@ app.whenReady().then(async () => {
     const setting = getSetting('global_hotkeys')
     return setting !== 0
   })
-  ipcMain.handle('window:setCustomHotkeys', (_, hotkeys: any) => {
+  ipcMain.handle('window:setCustomHotkeys', (_, hotkeys: CustomHotkeys) => {
     setSetting('custom_hotkeys', hotkeys)
     setupGlobalShortcuts()
   })
   ipcMain.handle('window:getCustomHotkeys', () => {
-    return (getSetting('custom_hotkeys') as any) || {
-      playPause: 'MediaPlayPause',
-      nextTrack: 'MediaNextTrack',
-      prevTrack: 'MediaPreviousTrack'
-    }
+    return getCustomHotkeys()
   })
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app.on('activate', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show()
   })
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.on('window-all-closed', () => {

@@ -13,6 +13,7 @@ import RadioView from './components/Radio/RadioView'
 import SubsonicView from './components/Subsonic/SubsonicView'
 import JellyfinView from './components/Jellyfin/JellyfinView'
 import { useApp } from './store/AppContext'
+import { getPlayerPosition } from './store/positionStore'
 import MiniPlayerHUD from './components/MiniPlayer/MiniPlayerHUD'
 
 import FullscreenPlayer from './components/FullscreenPlayer'
@@ -52,10 +53,10 @@ function AppInner(): React.ReactElement {
         togglePlayPause()
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        seekTo(Math.max(0, player.position - 5))
+        seekTo(Math.max(0, getPlayerPosition() - 5))
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
-        seekTo(Math.min(player.duration || Infinity, player.position + 5))
+        seekTo(Math.min(player.duration || Infinity, getPlayerPosition() + 5))
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         const newVol = Math.min(1, Math.round(((player.volume ?? 0.8) + 0.05) * 100) / 100)
@@ -69,7 +70,7 @@ function AppInner(): React.ReactElement {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeView, setActiveView, togglePlayPause, seekTo, setVolume, player.position, player.duration, player.volume])
+  }, [activeView, setActiveView, togglePlayPause, seekTo, setVolume, player.duration, player.volume])
 
   if (isMiniPlayer) {
     return <MiniPlayerHUD />

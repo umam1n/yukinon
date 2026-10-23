@@ -1,4 +1,4 @@
-import type { EQBands } from '../../../../shared/types'
+import type { EQBands } from '@shared/types'
 
 export interface AutoEQProfile {
   brand: string

@@ -1,21 +1,21 @@
 import { BrowserWindow, ipcMain as IpcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDb, getSetting, setSetting, getEQBandsFromPreset } from '../db'
-import type { EQPreset, EQBands } from '../../../shared/types'
+import type { EQPreset, EQBands } from '@shared/types'
 
 export function registerEQHandlers(ipc: typeof IpcMain, mainWindow: BrowserWindow): void {
   const db = getDb()
 
   // Get current EQ bands
   ipc.handle('eq:getBands', (): EQBands => {
-    const activePresetId = getSetting('active_eq_preset_id') || 'flat'
+    const activePresetId = (getSetting('active_eq_preset_id') as string) || 'flat'
     return getEQBandsFromPreset(activePresetId)
   })
 
   // Set a single EQ band gain
   ipc.handle('eq:setBand', (_, band: number, gain: number) => {
     // Update the active preset's bands on the fly
-    const activePresetId = getSetting('active_eq_preset_id') || 'flat'
+    const activePresetId = (getSetting('active_eq_preset_id') as string) || 'flat'
     const bands = getEQBandsFromPreset(activePresetId)
     bands[band as keyof EQBands] = gain
     // Save as a custom variation

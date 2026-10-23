@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { AppContext, type AppStore } from './AppContext'
+import { AppContext, type AppStore, type PlayerSnapshot } from './AppContext'
 import { audioEngine } from '../audio/AudioEngine'
 import { LocalPlayer } from '../audio/LocalPlayer'
 import { YTMPlayer } from '../audio/YTMPlayer'
@@ -7,7 +7,8 @@ import { RadioPlayer } from '../audio/RadioPlayer'
 import { SubsonicPlayer } from '../audio/SubsonicPlayer'
 import { JellyfinPlayer } from '../audio/JellyfinPlayer'
 import type { IPlayerProvider } from '../audio/IPlayerProvider'
-import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '../../../../shared/types'
+import type { Track, EQBands, EQPreset, AppTheme, PlayerState } from '@shared/types'
+import { setPlayerPosition, getPlayerPosition, subscribePlayerPosition } from './positionStore'
 
 const yukinon = window.yukinon
 
@@ -115,11 +116,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     })
   }, [])
   
-  const [player, setPlayerState] = useState<PlayerState>({
+  const [player, setPlayerState] = useState<PlayerSnapshot>({
     source: 'local',
     status: 'stopped',
     currentTrackId: null,
-    position: 0,
     duration: 0,
     volume: 0.8,
     shuffle: false,
@@ -129,7 +129,18 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   // Prevent React re-render cascades by keeping a mutable ref of the state
   const playerStateRef = useRef(player)
   const setPlayer = useCallback((state: Partial<PlayerState>) => {
-    playerStateRef.current = { ...playerStateRef.current, ...state }
+    const { position, ...rest } = state
+    if (position !== undefined) setPlayerPosition(position)
+
+    // Players re-send unchanged fields (YTM sends its whole state on every poll); skip no-op updates
+    const current = playerStateRef.current as Record<string, unknown>
+    const changed = Object.entries(rest).some(([key, value]) =>
+      value !== null && typeof value === 'object'
+        ? JSON.stringify(value) !== JSON.stringify(current[key])
+        : value !== current[key]
+    )
+    if (!changed) return
+    playerStateRef.current = { ...playerStateRef.current, ...rest }
     setPlayerState(playerStateRef.current)
   }, [])
 
@@ -710,13 +721,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
           artwork: artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/png' }] : []
         })
         navigator.mediaSession.playbackState = player.status === 'playing' ? 'playing' : 'paused'
-        if (player.duration > 0 && Number.isFinite(player.duration)) {
-          navigator.mediaSession.setPositionState?.({
-            duration: Math.max(0, player.duration),
-            playbackRate: 1,
-            position: Math.max(0, Math.min(player.position || 0, player.duration))
-          })
-        }
       } catch {
         // ignore MediaSession errors
       }
@@ -725,8 +729,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     player.currentTrackId,
     player.status,
     player.artwork,
-    player.position,
-    player.duration,
     player.source,
     player.ytmInfo,
     player.radioInfo,
@@ -735,6 +737,26 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     tracks,
     queue
   ])
+
+  // Keep the OS media widget's progress in sync without re-rendering the provider
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return
+    const update = (): void => {
+      const { duration } = playerStateRef.current
+      if (!(duration > 0 && Number.isFinite(duration))) return
+      try {
+        navigator.mediaSession.setPositionState?.({
+          duration,
+          playbackRate: 1,
+          position: Math.max(0, Math.min(getPlayerPosition(), duration))
+        })
+      } catch {
+        // ignore MediaSession errors
+      }
+    }
+    update()
+    return subscribePlayerPosition(update)
+  }, [player.duration])
 
   useEffect(() => {
     if ('mediaSession' in navigator) {

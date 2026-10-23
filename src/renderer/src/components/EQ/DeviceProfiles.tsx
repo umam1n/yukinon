@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Cpu, Trash2, Check } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
-import type { DeviceProfile, EQBands } from '../../../../../../shared/types'
+import type { DeviceProfile, EQBands } from '@shared/types'
 
 export default function DeviceProfiles(): React.ReactElement {
   const { eqBands, eqPresets, applyEqPreset } = useApp()

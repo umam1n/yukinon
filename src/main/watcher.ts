@@ -2,7 +2,7 @@ import chokidar, { FSWatcher } from 'chokidar'
 import { extname } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDb, getSetting } from './db'
-import { indexTrack } from './ipc/library'
+import { indexTrack, insertTrack } from './ipc/library'
 
 const AUDIO_EXTENSIONS = new Set(['.flac', '.mp3', '.wav', '.aiff', '.aac', '.ogg', '.m4a', '.opus'])
 
@@ -76,36 +76,7 @@ export function initLibraryWatcher(win: BrowserWindow): void {
       const track = await indexTrack(filePath)
       if (!track) return
 
-      const insertStmt = db.prepare(`
-        INSERT OR IGNORE INTO tracks
-          (id, path, title, artist, album, album_artist, year, genre, duration, artwork, format, bit_depth, sample_rate, bitrate, content_type, is_instrumental, is_live, mood, ai_tags, replaygain_track_gain, replaygain_track_peak)
-        VALUES
-          (@id, @path, @title, @artist, @album, @albumArtist, @year, @genre, @duration, @artwork, @format, @bitDepth, @sampleRate, @bitrate, @contentType, @isInstrumental, @isLive, @mood, @aiTags, @replaygainTrackGain, @replaygainTrackPeak)
-      `)
-
-      insertStmt.run({
-        id: track.id,
-        path: track.path,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        albumArtist: track.albumArtist ?? null,
-        year: track.year ?? null,
-        genre: track.genre ?? null,
-        duration: track.duration,
-        artwork: track.artwork ?? null,
-        format: track.format,
-        bitDepth: track.bitDepth ?? null,
-        sampleRate: track.sampleRate ?? null,
-        bitrate: track.bitrate ?? null,
-        contentType: track.contentType || 'music',
-        isInstrumental: track.isInstrumental ? 1 : 0,
-        isLive: track.isLive ? 1 : 0,
-        mood: track.mood ?? null,
-        aiTags: JSON.stringify(track.aiTags || []),
-        replaygainTrackGain: track.replaygainTrackGain ?? null,
-        replaygainTrackPeak: track.replaygainTrackPeak ?? null
-      })
+      insertTrack(db, track)
 
       if (targetWindow && !targetWindow.isDestroyed()) {
         targetWindow.webContents.send('library:trackAdded', track)

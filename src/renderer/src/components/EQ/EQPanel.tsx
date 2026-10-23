@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { RotateCcw, Save, Check, Headphones, Search, X, Activity } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
 import DeviceProfiles from './DeviceProfiles'
-import type { EQBands } from '../../../../../../shared/types'
+import type { EQBands } from '@shared/types'
 import { AUTOEQ_PROFILES, type AutoEQProfile } from '../../data/autoeq'
 import { audioEngine } from '../../audio/AudioEngine'
 

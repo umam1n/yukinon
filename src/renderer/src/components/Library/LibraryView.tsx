@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { FolderOpen, Search, Music2, RefreshCw, Disc, Mic2, ArrowLeft, Play } from 'lucide-react'
 import { useApp } from '../../store/AppContext'
-import type { Track } from '../../../../../../shared/types'
+import type { Track } from '@shared/types'
 import TrackList from './TrackList'
 
 type ViewMode = 'tracks' | 'albums' | 'artists'

@@ -117,5 +117,13 @@ describe('Smart Playlists & Acoustic Classifier', () => {
       expect(ALLOWED_COLUMNS.has('title')).toBe(true)
       expect(ALLOWED_COLUMNS.has('format')).toBe(true)
     })
+
+    it('rejects forbidden patterns consistently across repeated calls', () => {
+      // Regression: global regexes kept lastIndex between calls and skipped matches
+      for (let i = 0; i < 3; i++) {
+        expect(() => sanitizeSqlFilter("genre = 'rock' -- x")).toThrow(/Disallowed/)
+        expect(() => sanitizeSqlFilter('-- x')).toThrow(/Disallowed/)
+      }
+    })
   })
 })

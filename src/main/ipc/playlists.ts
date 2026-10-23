@@ -1,7 +1,7 @@
 import { ipcMain as IpcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDb } from '../db'
-import type { Track, Playlist } from '../../../shared/types'
+import type { Track, Playlist } from '@shared/types'
 import { sanitizeSqlFilter } from '../lib/sqlSanitizer'
 
 export function registerPlaylistsHandlers(ipc: typeof IpcMain): void {

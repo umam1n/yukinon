@@ -1,4 +1,4 @@
-import type { ContentType } from '../../shared/types'
+import type { ContentType } from '@shared/types'
 
 export interface TrackMetadataForClassification {
   title?: string

@@ -1,4 +1,4 @@
-import type { Track, PlayerState } from '../../../../shared/types'
+import type { Track, PlayerState } from '@shared/types'
 
 export interface IPlayerProvider {
   /** Play a specific track (local) or resume current playback */

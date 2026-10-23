@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { Track, TagUpdatePayload } from '@shared/types'
+
+type CustomHotkeys = { playPause?: string; nextTrack?: string; prevTrack?: string }
 
 // Expose typed IPC API to the renderer process
 const api = {
@@ -10,7 +13,7 @@ const api = {
     getAlwaysOnTop: () => ipcRenderer.invoke('window:getAlwaysOnTop'),
     setGlobalHotkeys: (enabled: boolean) => ipcRenderer.invoke('window:setGlobalHotkeys', enabled),
     getGlobalHotkeys: () => ipcRenderer.invoke('window:getGlobalHotkeys'),
-    setCustomHotkeys: (hotkeys: any) => ipcRenderer.invoke('window:setCustomHotkeys', hotkeys),
+    setCustomHotkeys: (hotkeys: CustomHotkeys) => ipcRenderer.invoke('window:setCustomHotkeys', hotkeys),
     getCustomHotkeys: () => ipcRenderer.invoke('window:getCustomHotkeys'),
     enterMiniPlayer: () => ipcRenderer.invoke('window:enterMiniPlayer'),
     exitMiniPlayer: () => ipcRenderer.invoke('window:exitMiniPlayer'),
@@ -30,14 +33,14 @@ const api = {
     removeFolder: (folderPath: string) => ipcRenderer.invoke('library:removeFolder', folderPath),
     findDuplicates: () => ipcRenderer.invoke('library:findDuplicates'),
     removeDuplicates: () => ipcRenderer.invoke('library:removeDuplicates'),
-    updateTags: (id: string, tags: any) => ipcRenderer.invoke('library:updateTags', { id, tags }),
+    updateTags: (id: string, tags: TagUpdatePayload) => ipcRenderer.invoke('library:updateTags', { id, tags }),
     onChanged: (callback: () => void) => {
       const sub = () => callback()
       ipcRenderer.on('library:changed', sub)
       return () => ipcRenderer.removeListener('library:changed', sub)
     },
-    onTrackAdded: (callback: (track: any) => void) => {
-      const sub = (_: Electron.IpcRendererEvent, track: any) => callback(track)
+    onTrackAdded: (callback: (track: Track) => void) => {
+      const sub = (_: Electron.IpcRendererEvent, track: Track) => callback(track)
       ipcRenderer.on('library:trackAdded', sub)
       return () => ipcRenderer.removeListener('library:trackAdded', sub)
     },
@@ -56,7 +59,7 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke('playlists:delete', id),
     getAll: () => ipcRenderer.invoke('playlists:getAll'),
     getTracks: (id: string) => ipcRenderer.invoke('playlists:getTracks', id),
-    addTrack: (playlistId: string, track: any) => ipcRenderer.invoke('playlists:addTrack', playlistId, track),
+    addTrack: (playlistId: string, track: Track) => ipcRenderer.invoke('playlists:addTrack', playlistId, track),
     removeTrack: (playlistTrackId: string) => ipcRenderer.invoke('playlists:removeTrack', playlistTrackId)
   },
 
@@ -109,8 +112,9 @@ const api = {
     openLogin: () => ipcRenderer.invoke('ytm:openLogin'),
     clearSession: () => ipcRenderer.invoke('ytm:clearSession'),
     onStateUpdate: (callback: (state: any) => void) => {
-      ipcRenderer.on('ytm:state-update', (_event, state) => callback(state))
-      return () => ipcRenderer.removeAllListeners('ytm:state-update')
+      const sub = (_: Electron.IpcRendererEvent, state: any) => callback(state)
+      ipcRenderer.on('ytm:state-update', sub)
+      return () => ipcRenderer.removeListener('ytm:state-update', sub)
     }
   },
 
@@ -149,7 +153,7 @@ const api = {
   // Settings
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
-    set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value)
+    set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value)
   },
 
   // AI (Gemini 2.5 Flash Free)

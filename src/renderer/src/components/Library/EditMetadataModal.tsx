@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { X, Save, Music2, FileAudio, Disc } from 'lucide-react'
-import type { Track, TagUpdatePayload } from '../../../../../shared/types'
+import type { Track, TagUpdatePayload } from '@shared/types'
 import { useApp } from '../../store/AppContext'
 
 interface EditMetadataModalProps {

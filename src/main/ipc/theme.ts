@@ -1,13 +1,13 @@
 import { BrowserWindow, ipcMain as IpcMain } from 'electron'
 import { getSetting, setSetting } from '../db'
-import type { AppTheme } from '../../../shared/types'
+import type { AppTheme } from '@shared/types'
 
 export function registerThemeHandlers(ipc: typeof IpcMain, mainWindow: BrowserWindow): void {
   ipc.handle('theme:get', (): AppTheme => {
     return {
       mode: (getSetting('theme_mode') as 'dark' | 'light') || 'dark',
-      accentColor: getSetting('accent_color') || '#c084fc',
-      accent2Color: getSetting('accent2_color') || '#67e8f9'
+      accentColor: (getSetting('accent_color') as string) || '#c084fc',
+      accent2Color: (getSetting('accent2_color') as string) || '#67e8f9'
     }
   })
 

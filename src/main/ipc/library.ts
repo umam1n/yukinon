@@ -3,16 +3,72 @@ import { readdir, mkdir, writeFile, readFile } from 'fs/promises'
 import { join, extname } from 'path'
 import { parseFile } from 'music-metadata'
 import { randomUUID } from 'crypto'
+import type Database from 'better-sqlite3'
 import NodeID3 from 'node-id3'
 import { readFlacTags, writeFlacTags } from 'flac-tagger'
-import { getDb, getSetting, setSetting } from '../db'
-import type { Track, TagUpdatePayload } from '../../../shared/types'
+import { getDb, getSetting, setSetting, getArtworksDir } from '../db'
+import type { Track, TagUpdatePayload } from '@shared/types'
 import { existsSync } from 'fs'
 import { classifyTrack } from '../lib/classifier'
 import { clusterDuplicateTracks } from '../lib/duplicates'
+import { folderLikePattern, artworkUrl } from '../lib/paths'
 import { updateWatchedFolders } from '../watcher'
 
 const SUPPORTED_FORMATS = new Set(['.flac', '.mp3', '.wav', '.aiff', '.aac', '.ogg', '.m4a', '.opus'])
+
+// Columns returned to the renderer (artwork excluded to keep IPC payloads small)
+const TRACK_SELECT_SQL = `
+  SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
+         track_number as trackNumber,
+         duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
+         play_count as playCount, is_favorite as isFavorite,
+         content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
+         mood, ai_tags as aiTags,
+         replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
+  FROM tracks`
+
+function rowToTrack(row: any): Track {
+  return {
+    ...row,
+    trackNumber: row.trackNumber ?? undefined,
+    isInstrumental: Boolean(row.isInstrumental),
+    isLive: Boolean(row.isLive),
+    aiTags: row.aiTags ? JSON.parse(row.aiTags) : []
+  }
+}
+
+export function insertTrack(db: Database.Database, track: Track): void {
+  db.prepare(`
+    INSERT OR IGNORE INTO tracks
+      (id, path, title, artist, album, album_artist, year, genre, track_number, duration, artwork, format, bit_depth, sample_rate, bitrate, content_type, is_instrumental, is_live, mood, ai_tags, replaygain_track_gain, replaygain_track_peak)
+    VALUES
+      (@id, @path, @title, @artist, @album, @albumArtist, @year, @genre, @trackNumber, @duration, @artwork, @format, @bitDepth, @sampleRate, @bitrate, @contentType, @isInstrumental, @isLive, @mood, @aiTags, @replaygainTrackGain, @replaygainTrackPeak)
+  `).run({
+    id: track.id,
+    path: track.path,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    albumArtist: track.albumArtist ?? null,
+    year: track.year ?? null,
+    genre: track.genre ?? null,
+    trackNumber: track.trackNumber ?? null,
+    duration: track.duration,
+    artwork: track.artwork ?? null,
+    format: track.format,
+    bitDepth: track.bitDepth ?? null,
+    sampleRate: track.sampleRate ?? null,
+    bitrate: track.bitrate ?? null,
+    contentType: track.contentType || 'music',
+    isInstrumental: track.isInstrumental ? 1 : 0,
+    isLive: track.isLive ? 1 : 0,
+    mood: track.mood ?? null,
+    aiTags: JSON.stringify(track.aiTags || []),
+    replaygainTrackGain: track.replaygainTrackGain ?? null,
+    replaygainTrackPeak: track.replaygainTrackPeak ?? null
+  })
+}
+
 
 async function scanDirectory(dirPath: string): Promise<string[]> {
   const files: string[] = []
@@ -47,7 +103,7 @@ export async function indexTrack(filePath: string): Promise<Track | null> {
     let artworkPath: string | undefined
     if (!skipCovers && common.picture && common.picture.length > 0) {
       try {
-        const artworksDir = join(app.getPath('userData'), 'artworks')
+        const artworksDir = getArtworksDir()
         if (!existsSync(artworksDir)) {
           await mkdir(artworksDir, { recursive: true })
         }
@@ -56,7 +112,7 @@ export async function indexTrack(filePath: string): Promise<Track | null> {
         const fileName = `${id}.${ext}`
         const fullPath = join(artworksDir, fileName)
         await writeFile(fullPath, pic.data)
-        artworkPath = `file://${fullPath}`
+        artworkPath = artworkUrl(fullPath)
       } catch (err) {
         console.error('[Library] Failed to save artwork for', filePath, err)
       }
@@ -92,6 +148,7 @@ export async function indexTrack(filePath: string): Promise<Track | null> {
       albumArtist: common.albumartist,
       year: common.year,
       genre: common.genre?.[0],
+      trackNumber: common.track?.no ?? undefined,
       duration,
       artwork: artworkPath,
       format: extname(filePath).slice(1).toLowerCase(),
@@ -120,39 +177,8 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
     const files = await scanDirectory(folderPath)
     const added: Track[] = []
     const checkExisting = db.prepare('SELECT id FROM tracks WHERE path = ?')
-    const insertStmt = db.prepare(`
-      INSERT OR IGNORE INTO tracks
-        (id, path, title, artist, album, album_artist, year, genre, duration, artwork, format, bit_depth, sample_rate, bitrate, content_type, is_instrumental, is_live, mood, ai_tags, replaygain_track_gain, replaygain_track_peak)
-      VALUES
-        (@id, @path, @title, @artist, @album, @albumArtist, @year, @genre, @duration, @artwork, @format, @bitDepth, @sampleRate, @bitrate, @contentType, @isInstrumental, @isLive, @mood, @aiTags, @replaygainTrackGain, @replaygainTrackPeak)
-    `)
-
     const insertMany = db.transaction((tracksToIndex: Track[]) => {
-      for (const track of tracksToIndex) {
-        insertStmt.run({
-          id: track.id,
-          path: track.path,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          albumArtist: track.albumArtist ?? null,
-          year: track.year ?? null,
-          genre: track.genre ?? null,
-          duration: track.duration,
-          artwork: track.artwork ?? null,
-          format: track.format,
-          bitDepth: track.bitDepth ?? null,
-          sampleRate: track.sampleRate ?? null,
-          bitrate: track.bitrate ?? null,
-          contentType: track.contentType || 'music',
-          isInstrumental: track.isInstrumental ? 1 : 0,
-          isLive: track.isLive ? 1 : 0,
-          mood: track.mood ?? null,
-          aiTags: JSON.stringify(track.aiTags || []),
-          replaygainTrackGain: track.replaygainTrackGain ?? null,
-          replaygainTrackPeak: track.replaygainTrackPeak ?? null
-        })
-      }
+      for (const track of tracksToIndex) insertTrack(db, track)
     })
 
     const newTracks: Track[] = []
@@ -184,44 +210,14 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
 
   // Get all tracks (excluding artwork to prevent IPC/memory freeze)
   ipc.handle('library:getTracks', () => {
-    const rows = db.prepare(`
-      SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
-             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
-             play_count as playCount, is_favorite as isFavorite,
-             content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
-             mood, ai_tags as aiTags,
-             replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
-      FROM tracks
-      ORDER BY artist, album, title
-    `).all() as any[]
-
-    return rows.map((r) => ({
-      ...r,
-      isInstrumental: Boolean(r.isInstrumental),
-      isLive: Boolean(r.isLive),
-      aiTags: r.aiTags ? JSON.parse(r.aiTags) : []
-    })) as Track[]
+    const rows = db.prepare(`${TRACK_SELECT_SQL} ORDER BY artist, album, track_number, title`).all()
+    return rows.map(rowToTrack)
   })
 
   // Get single track (excluding artwork)
   ipc.handle('library:getTrack', (_, id: string) => {
-    const row = db.prepare(`
-      SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
-             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
-             play_count as playCount, is_favorite as isFavorite,
-             content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
-             mood, ai_tags as aiTags,
-             replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
-      FROM tracks WHERE id = ?
-    `).get(id) as any
-
-    if (!row) return undefined
-    return {
-      ...row,
-      isInstrumental: Boolean(row.isInstrumental),
-      isLive: Boolean(row.isLive),
-      aiTags: row.aiTags ? JSON.parse(row.aiTags) : []
-    } as Track
+    const row = db.prepare(`${TRACK_SELECT_SQL} WHERE id = ?`).get(id)
+    return row ? rowToTrack(row) : undefined
   })
 
   // Get single track artwork (on-demand to save RAM)
@@ -281,29 +277,15 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
     const updatedAlbumArtist = tags.albumArtist !== undefined ? tags.albumArtist : track.album_artist
     const updatedYear = tags.year !== undefined ? tags.year : track.year
     const updatedGenre = tags.genre !== undefined ? tags.genre : track.genre
+    const updatedTrackNumber = tags.trackNumber !== undefined ? tags.trackNumber : track.track_number
 
     db.prepare(`
       UPDATE tracks
-      SET title = ?, artist = ?, album = ?, album_artist = ?, year = ?, genre = ?
+      SET title = ?, artist = ?, album = ?, album_artist = ?, year = ?, genre = ?, track_number = ?
       WHERE id = ?
-    `).run(updatedTitle, updatedArtist, updatedAlbum, updatedAlbumArtist, updatedYear, updatedGenre, id)
+    `).run(updatedTitle, updatedArtist, updatedAlbum, updatedAlbumArtist, updatedYear, updatedGenre, updatedTrackNumber ?? null, id)
 
-    const row = db.prepare(`
-      SELECT id, 'local' as source, path, title, artist, album, album_artist as albumArtist, year, genre,
-             duration, format, bit_depth as bitDepth, sample_rate as sampleRate, bitrate,
-             play_count as playCount, is_favorite as isFavorite,
-             content_type as contentType, is_instrumental as isInstrumental, is_live as isLive,
-             mood, ai_tags as aiTags,
-             replaygain_track_gain as replaygainTrackGain, replaygain_track_peak as replaygainTrackPeak
-      FROM tracks WHERE id = ?
-    `).get(id) as any
-
-    return {
-      ...row,
-      isInstrumental: Boolean(row.isInstrumental),
-      isLive: Boolean(row.isLive),
-      aiTags: row.aiTags ? JSON.parse(row.aiTags) : []
-    } as Track
+    return rowToTrack(db.prepare(`${TRACK_SELECT_SQL} WHERE id = ?`).get(id))
   })
 
   // Get lyrics: sidecar .lrc or embedded tags
@@ -370,7 +352,7 @@ export function registerLibraryHandlers(ipc: typeof IpcMain): void {
 
   // Remove a music folder and its tracks
   ipc.handle('library:removeFolder', (_, folderPath: string) => {
-    db.prepare('DELETE FROM tracks WHERE path LIKE ?').run(`${folderPath}%`)
+    db.prepare("DELETE FROM tracks WHERE path LIKE ? ESCAPE '\\'").run(folderLikePattern(folderPath))
     const folders = (getSetting('music_folders') as string[]) || []
     const updated = folders.filter((f) => f !== folderPath)
     setSetting('music_folders', updated)
